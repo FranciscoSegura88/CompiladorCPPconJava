@@ -11,26 +11,17 @@ import com.compilador.CompilerError.TipoError;
 
 /*═══════════════════════════════════════════════════════
   CÓDIGO INYECTADO EN LA CLASE parser
-  Aquí guardamos la referencia al scanner para poder
-  agregar errores sintácticos a su misma lista.
 ═══════════════════════════════════════════════════════*/
 
 parser code {:
 
-    // Referencia al scanner para compartir la lista de errores
     private ScannerLexicoCpp scanner;
 
-    // Constructor que recibe el scanner (usado en Main.java)
     public parser(ScannerLexicoCpp scanner) {
         this(scanner, new DefaultSymbolFactory());
         this.scanner = scanner;
     }
 
-    /**
-     * Sobreescribimos report_error para que los errores sintácticos
-     * se guarden en la misma lista de CompilerError del scanner,
-     * en lugar de imprimirse directo a System.err.
-     */
     @Override
     public void report_error(String mensaje, Object info) {
         int linea   = 0;
@@ -39,8 +30,8 @@ parser code {:
 
         if (info instanceof Symbol) {
             Symbol s = (Symbol) info;
-            linea   = s.left;   // mapeado desde yyline+1 en el scanner
-            columna = s.right;  // mapeado desde yycolumn+1 en el scanner
+            linea   = s.left;
+            columna = s.right;
             if (s.value != null) token = s.value.toString();
         }
 
@@ -49,19 +40,26 @@ parser code {:
         );
     }
 
-    // Evita que un error fatal detenga todo el análisis
     @Override
     public void report_fatal_error(String mensaje, Object info) {
         report_error(mensaje, info);
     }
+
+    @Override
+    public void syntax_error(Symbol cur_token) {
+        // Silenciado — los errores los capturan las reglas error de la gramatica
+    }
+
+    @Override
+    public void unrecovered_syntax_error(Symbol cur_token) {
+        report_error("Error de sintaxis no recuperable", cur_token);
+    }
 :};
 
 /*═══════════════════════════════════════════════════════
-  TERMINALES  (deben coincidir exactamente con sym.XXX
-               que genera JCup a partir de estos nombres)
+  TERMINALES
 ═══════════════════════════════════════════════════════*/
 
-/* Palabras reservadas */
 terminal PR_INT, PR_FLOAT, PR_BOOL, PR_CHAR, PR_STRING, PR_DOUBLE;
 terminal PR_VOID, PR_MAIN;
 terminal PR_IF, PR_ELSE, PR_WHILE, PR_DO, PR_RETURN;
@@ -69,24 +67,17 @@ terminal PR_INCLUDE, PR_STD, PR_COUT, PR_CIN;
 terminal PR_USING, PR_NAMESPACE, PR_ENDL;
 terminal LIB_IOSTREAM;
 
-/* Operadores aritméticos */
 terminal OP_SUMA, OP_RESTA, OP_MULT, OP_DIV;
-
-/* Operadores de comparación */
 terminal OP_ASIG, OP_IGUAL, OP_DIF;
 terminal OP_MENOR, OP_MAYOR, OP_MENOR_IGUAL, OP_MAYOR_IGUAL;
-
-/* Operadores lógicos y de flujo */
 terminal OP_AND, OP_OR, OP_NOT;
 terminal OP_FLUJO_SAL, OP_FLUJO_ENT;
 
-/* Delimitadores */
 terminal PUNTO_COMA, COMA, HASH;
 terminal PAREN_IZQ, PAREN_DER;
 terminal LLAVE_IZQ, LLAVE_DER;
 terminal DOBLE_DOS;
 
-/* Literales e identificador */
 terminal String  ID;
 terminal Integer LIT_ENTERO;
 terminal Double  LIT_DECIMAL;
@@ -104,7 +95,7 @@ non terminal parametros, lista_parametros, parametro;
 non terminal cuerpo_funcion;
 
 /*═══════════════════════════════════════════════════════
-  PRECEDENCIA  (de menor a mayor prioridad)
+  PRECEDENCIA
 ═══════════════════════════════════════════════════════*/
 
 precedence left  OP_OR;
@@ -121,14 +112,13 @@ start with programa;
   REGLAS DE PRODUCCIÓN
 ═══════════════════════════════════════════════════════*/
 
-/* ── Programa completo ── */
 programa
     ::= lista_directivas lista_funciones
     |   lista_funciones
     ;
 
 /* ══════════════════════════════════
-   DIRECTIVAS  (#include <iostream>)
+   DIRECTIVAS
 ══════════════════════════════════ */
 
 lista_directivas
@@ -137,16 +127,9 @@ lista_directivas
     ;
 
 directiva
-    /* #include <iostream> */
     ::= HASH PR_INCLUDE OP_MENOR LIB_IOSTREAM OP_MAYOR
-
-    /* #include <archivo> cualquiera */
     |   HASH PR_INCLUDE OP_MENOR ID OP_MAYOR
-
-    /* using namespace std; */
     |   PR_USING PR_NAMESPACE PR_STD PUNTO_COMA
-
-    /* Error: directiva mal formada */
     |   HASH PR_INCLUDE error
         {: parser.report_error(
                "Directiva #include inválida",
@@ -163,26 +146,20 @@ lista_funciones
     ;
 
 declaracion_funcion
-
-    /* ── CASO NORMAL ── */
     ::= tipo ID PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_funcion LLAVE_DER
 
-    /* ── int main() { } ── */
     |   tipo PR_MAIN PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_funcion LLAVE_DER
 
-    /* ── Falta ')': tipo id( params { } ── */
     |   tipo ID PAREN_IZQ parametros error LLAVE_IZQ cuerpo_funcion LLAVE_DER
         {: parser.report_error(
                "Falta '(' o ')' en declaración de función",
                CUP$parser$stack.peek()); :}
 
-    /* ── Sin paréntesis en absoluto: tipo id { } ── */
     |   tipo ID LLAVE_IZQ cuerpo_funcion LLAVE_DER
         {: parser.report_error(
                "Falta '(' o ')' en declaración de función",
                CUP$parser$stack.peek()); :}
 
-    /* ── Sin tipo de retorno: id( params ) { } ── */
     |   ID PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_funcion LLAVE_DER
         {: parser.report_error(
                "Tipo de retorno inválido",
@@ -190,7 +167,7 @@ declaracion_funcion
     ;
 
 /* ══════════════════════════════════
-   TIPOS VÁLIDOS EN C++
+   TIPOS
 ══════════════════════════════════ */
 
 tipo
@@ -201,7 +178,7 @@ tipo
     |   PR_CHAR
     |   PR_STRING
     |   PR_VOID
-    |   ID          /* tipos definidos por el usuario */
+    |   ID
     ;
 
 /* ══════════════════════════════════
@@ -210,12 +187,18 @@ tipo
 
 parametros
     ::= lista_parametros
-    |   /* sin parámetros — vacío permitido */
+    |   /* sin parámetros */
     ;
 
 lista_parametros
-    /* caso normal: tipo id, tipo id, ... */
     ::= lista_parametros COMA parametro
+
+    /* coma sobrante: float x, ) */
+    |   lista_parametros COMA
+        {: parser.report_error(
+               "Parámetro inválido (coma sobrante al final de la lista)",
+               CUP$parser$stack.peek()); :}
+
     |   parametro
     ;
 
@@ -223,22 +206,15 @@ parametro
     /* caso normal: int a */
     ::= tipo ID
 
-    /* coma sobrante al final: float x, ) */
-    |   tipo COMA
-        {: parser.report_error(
-               "Parámetro inválido (coma sobrante)",
-               CUP$parser$stack.peek()); :}
-
     /* falta nombre o falta coma: int , int b  /  int a int b */
     |   tipo error
         {: parser.report_error(
-               "Parámetro inválido (falta nombre o falta ',' entre parametros)",
+               "Parámetro inválido (falta nombre o falta ',' entre parámetros)",
                CUP$parser$stack.peek()); :}
     ;
 
 /* ══════════════════════════════════
-   CUERPO DE FUNCIÓN
-   Vacío por ahora (práctica actual)
+   CUERPO DE FUNCIÓN (vacío por ahora)
 ══════════════════════════════════ */
 
 cuerpo_funcion
