@@ -8,57 +8,65 @@ package com.compilador.parser;
 /** CUP generated interface containing symbol constants. */
 public interface sym {
   /* terminals */
-  public static final int LIT_DECIMAL = 49;
+  public static final int LIT_DECIMAL = 55;
   public static final int PR_INT = 2;
-  public static final int OP_MAYOR = 31;
+  public static final int OP_MAYOR = 36;
   public static final int PR_STD = 16;
-  public static final int DOBLE_DOS = 46;
+  public static final int DOBLE_DOS = 51;
   public static final int PR_VOID = 8;
-  public static final int OP_FLUJO_SAL = 37;
-  public static final int HASH = 41;
-  public static final int OP_NOT = 36;
-  public static final int OP_AND = 34;
+  public static final int PR_PRIVATE = 26;
+  public static final int OP_FLUJO_SAL = 42;
+  public static final int DOS_PUNTOS = 52;
+  public static final int HASH = 46;
+  public static final int OP_NOT = 41;
+  public static final int OP_AND = 39;
   public static final int PR_IF = 10;
   public static final int PR_RETURN = 14;
   public static final int PR_ELSE = 11;
   public static final int PR_COUT = 17;
   public static final int PR_WHILE = 12;
-  public static final int OP_DIV = 26;
-  public static final int LLAVE_IZQ = 44;
+  public static final int OP_DIV = 31;
+  public static final int LLAVE_IZQ = 49;
   public static final int PR_FLOAT = 3;
-  public static final int PAREN_DER = 43;
+  public static final int PR_PROTECTED = 27;
+  public static final int PAREN_DER = 48;
   public static final int LIB_IOSTREAM = 22;
   public static final int PR_CIN = 18;
-  public static final int OP_DIF = 29;
-  public static final int ID = 47;
-  public static final int PUNTO_COMA = 39;
-  public static final int OP_FLUJO_ENT = 38;
+  public static final int OP_DIF = 34;
+  public static final int ID = 53;
+  public static final int PUNTO_COMA = 44;
+  public static final int OP_FLUJO_ENT = 43;
   public static final int EOF = 0;
+  public static final int PR_PUBLIC = 25;
   public static final int error = 1;
   public static final int PR_INCLUDE = 15;
-  public static final int COMA = 40;
-  public static final int LIT_STRING = 50;
-  public static final int OP_MULT = 25;
-  public static final int OP_OR = 35;
-  public static final int OP_RESTA = 24;
+  public static final int COMA = 45;
+  public static final int LIT_STRING = 56;
+  public static final int OP_MULT = 30;
+  public static final int OP_OR = 40;
+  public static final int LIT_CHAR = 57;
+  public static final int OP_RESTA = 29;
   public static final int PR_STRING = 6;
+  public static final int PR_CONST = 24;
   public static final int PR_CHAR = 5;
+  public static final int OP_MAYOR_IGUAL = 38;
   public static final int PR_USING = 19;
-  public static final int OP_MAYOR_IGUAL = 33;
-  public static final int LLAVE_DER = 45;
-  public static final int OP_IGUAL = 28;
+  public static final int LLAVE_DER = 50;
+  public static final int OP_IGUAL = 33;
   public static final int PR_DO = 13;
   public static final int PR_NAMESPACE = 20;
-  public static final int OP_MENOR_IGUAL = 32;
+  public static final int OP_MENOR_IGUAL = 37;
   public static final int PR_ENDL = 21;
-  public static final int LIT_ENTERO = 48;
+  public static final int LIT_ENTERO = 54;
+  public static final int LIT_BOOL = 58;
+  public static final int PR_CLASS = 23;
   public static final int PR_BOOL = 4;
-  public static final int OP_SUMA = 23;
+  public static final int OP_SUMA = 28;
   public static final int PR_DOUBLE = 7;
-  public static final int PAREN_IZQ = 42;
+  public static final int PAREN_IZQ = 47;
   public static final int PR_MAIN = 9;
-  public static final int OP_ASIG = 27;
-  public static final int OP_MENOR = 30;
+  public static final int OP_ASIG = 32;
+  public static final int OP_MENOR = 35;
   public static final String[] terminalNames = new String[] {
   "EOF",
   "error",
@@ -83,6 +91,11 @@ public interface sym {
   "PR_NAMESPACE",
   "PR_ENDL",
   "LIB_IOSTREAM",
+  "PR_CLASS",
+  "PR_CONST",
+  "PR_PUBLIC",
+  "PR_PRIVATE",
+  "PR_PROTECTED",
   "OP_SUMA",
   "OP_RESTA",
   "OP_MULT",
@@ -107,10 +120,13 @@ public interface sym {
   "LLAVE_IZQ",
   "LLAVE_DER",
   "DOBLE_DOS",
+  "DOS_PUNTOS",
   "ID",
   "LIT_ENTERO",
   "LIT_DECIMAL",
-  "LIT_STRING"
+  "LIT_STRING",
+  "LIT_CHAR",
+  "LIT_BOOL"
   };
 }
 

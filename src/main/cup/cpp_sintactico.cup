@@ -47,7 +47,7 @@ parser code {:
 
     @Override
     public void syntax_error(Symbol cur_token) {
-        // Silenciado — los errores los capturan las reglas error de la gramatica
+        // Silenciado — los errores los capturan las reglas error de la gramática
     }
 
     @Override
@@ -60,6 +60,7 @@ parser code {:
   TERMINALES
 ═══════════════════════════════════════════════════════*/
 
+/* Palabras reservadas — existentes */
 terminal PR_INT, PR_FLOAT, PR_BOOL, PR_CHAR, PR_STRING, PR_DOUBLE;
 terminal PR_VOID, PR_MAIN;
 terminal PR_IF, PR_ELSE, PR_WHILE, PR_DO, PR_RETURN;
@@ -67,21 +68,31 @@ terminal PR_INCLUDE, PR_STD, PR_COUT, PR_CIN;
 terminal PR_USING, PR_NAMESPACE, PR_ENDL;
 terminal LIB_IOSTREAM;
 
+/* Palabras reservadas — NUEVAS (A4) */
+terminal PR_CLASS;
+terminal PR_CONST;
+terminal PR_PUBLIC, PR_PRIVATE, PR_PROTECTED;
+
+/* Operadores */
 terminal OP_SUMA, OP_RESTA, OP_MULT, OP_DIV;
 terminal OP_ASIG, OP_IGUAL, OP_DIF;
 terminal OP_MENOR, OP_MAYOR, OP_MENOR_IGUAL, OP_MAYOR_IGUAL;
 terminal OP_AND, OP_OR, OP_NOT;
 terminal OP_FLUJO_SAL, OP_FLUJO_ENT;
 
+/* Delimitadores */
 terminal PUNTO_COMA, COMA, HASH;
 terminal PAREN_IZQ, PAREN_DER;
 terminal LLAVE_IZQ, LLAVE_DER;
-terminal DOBLE_DOS;
+terminal DOBLE_DOS, DOS_PUNTOS;   /* DOS_PUNTOS = ':' para public: private: */
 
+/* Literales */
 terminal String  ID;
 terminal Integer LIT_ENTERO;
 terminal Double  LIT_DECIMAL;
 terminal String  LIT_STRING;
+terminal String  LIT_CHAR;
+terminal Boolean LIT_BOOL;
 
 /*═══════════════════════════════════════════════════════
   NO TERMINALES
@@ -89,10 +100,14 @@ terminal String  LIT_STRING;
 
 non terminal programa;
 non terminal lista_directivas, directiva;
-non terminal lista_funciones,  declaracion_funcion;
-non terminal tipo;
+non terminal lista_clases, clase;
+non terminal cuerpo_clase, lista_miembros_clase, miembro_clase;
+non terminal seccion_acceso;
+non terminal atributo, constante, lista_ids;
+non terminal declaracion_metodo;
+non terminal tipo, valor;
 non terminal parametros, lista_parametros, parametro;
-non terminal cuerpo_funcion;
+non terminal cuerpo_metodo, cuerpo_metodo_tail, lista_sentencias_metodo, variable;
 
 /*═══════════════════════════════════════════════════════
   PRECEDENCIA
@@ -112,13 +127,14 @@ start with programa;
   REGLAS DE PRODUCCIÓN
 ═══════════════════════════════════════════════════════*/
 
+/* ── Programa ── */
 programa
-    ::= lista_directivas lista_funciones
-    |   lista_funciones
+    ::= lista_directivas lista_clases
+    |   lista_clases
     ;
 
 /* ══════════════════════════════════
-   DIRECTIVAS
+   DIRECTIVAS (#include / using)
 ══════════════════════════════════ */
 
 lista_directivas
@@ -137,37 +153,199 @@ directiva
     ;
 
 /* ══════════════════════════════════
-   FUNCIONES
+   CLASES
 ══════════════════════════════════ */
 
-lista_funciones
-    ::= lista_funciones declaracion_funcion
-    |   declaracion_funcion
+lista_clases
+    ::= lista_clases clase
+    |   clase
     ;
 
-declaracion_funcion
-    ::= tipo ID PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_funcion LLAVE_DER
+clase
+    /* class NombreClase { ... } */
+    ::= PR_CLASS ID LLAVE_IZQ cuerpo_clase LLAVE_DER
 
-    |   tipo PR_MAIN PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_funcion LLAVE_DER
+    /* class NombreClase { ... }; — con punto y coma al final (estilo C++) */
+    |   PR_CLASS ID LLAVE_IZQ cuerpo_clase LLAVE_DER PUNTO_COMA
 
-    |   tipo ID PAREN_IZQ parametros error LLAVE_IZQ cuerpo_funcion LLAVE_DER
+    /* Error: nombre de clase inválido */
+    |   PR_CLASS error LLAVE_IZQ cuerpo_clase LLAVE_DER
         {: parser.report_error(
-               "Falta '(' o ')' en declaración de función",
-               CUP$parser$stack.peek()); :}
-
-    |   tipo ID LLAVE_IZQ cuerpo_funcion LLAVE_DER
-        {: parser.report_error(
-               "Falta '(' o ')' en declaración de función",
-               CUP$parser$stack.peek()); :}
-
-    |   ID PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_funcion LLAVE_DER
-        {: parser.report_error(
-               "Tipo de retorno inválido",
+               "Nombre de clase inválido",
                CUP$parser$stack.peek()); :}
     ;
 
 /* ══════════════════════════════════
-   TIPOS
+   CUERPO DE CLASE
+   Puede tener secciones public:/private:/protected:
+   mezcladas con miembros sin sección
+══════════════════════════════════ */
+
+cuerpo_clase
+    ::= lista_miembros_clase
+    |   /* clase vacía */
+    ;
+
+lista_miembros_clase
+    ::= lista_miembros_clase miembro_clase
+    |   miembro_clase
+    ;
+
+miembro_clase
+    /* Sección de acceso: public: private: protected: */
+    ::= seccion_acceso
+
+    /* Atributo: int edad; / float salario = 5000; */
+    |   atributo
+
+    /* Constante: const double PI = 3.1416; */
+    |   constante
+
+    /* Método: void registrar(int a) { } */
+    |   declaracion_metodo
+
+    /* Miembro inválido — recuperar hasta el siguiente ';' */
+    |   error PUNTO_COMA
+        {: parser.report_error(
+               "Declaración inválida en cuerpo de clase",
+               CUP$parser$stack.peek()); :}
+    ;
+
+/* ── Secciones de acceso ── */
+seccion_acceso
+    ::= PR_PUBLIC    DOS_PUNTOS
+    |   PR_PRIVATE   DOS_PUNTOS
+    |   PR_PROTECTED DOS_PUNTOS
+
+    /* Error: falta ':' después de public/private/protected */
+    |   PR_PUBLIC    error
+        {: parser.report_error(
+               "Falta ':' después de 'public'",
+               CUP$parser$stack.peek()); :}
+    |   PR_PRIVATE   error
+        {: parser.report_error(
+               "Falta ':' después de 'private'",
+               CUP$parser$stack.peek()); :}
+    |   PR_PROTECTED error
+        {: parser.report_error(
+               "Falta ':' después de 'protected'",
+               CUP$parser$stack.peek()); :}
+    ;
+
+/* ══════════════════════════════════
+   ATRIBUTOS DE CLASE
+   int edad;
+   float salario = 5000;
+   String nombre, apellido;
+══════════════════════════════════ */
+
+atributo
+    /* sin inicialización: int edad; */
+    ::= tipo lista_ids PUNTO_COMA
+
+    /* con inicialización: float salario = 5000; */
+    |   tipo lista_ids OP_ASIG valor PUNTO_COMA
+
+    /* Error: falta ';' al final del atributo */
+    |   tipo lista_ids OP_ASIG valor error
+        {: parser.report_error(
+               "Falta ';' en declaración de atributo",
+               CUP$parser$stack.peek()); :}
+    ;
+
+/* ══════════════════════════════════
+   CONSTANTES
+   const double PI = 3.1416;
+   const int MAX = 100;
+══════════════════════════════════ */
+
+constante
+    /* caso correcto: const tipo id = valor; */
+    ::= PR_CONST tipo ID OP_ASIG valor PUNTO_COMA
+
+    /* Error: constante sin inicializar — const tipo id; */
+    |   PR_CONST tipo ID PUNTO_COMA
+        {: parser.report_error(
+               "Constante debe inicializarse",
+               CUP$parser$stack.peek()); :}
+
+    /* Error: constante sin inicializar y sin ';' */
+    |   PR_CONST tipo ID error
+        {: parser.report_error(
+               "Constante debe inicializarse",
+               CUP$parser$stack.peek()); :}
+
+    /* Error: falta ';' al final de constante */
+    |   PR_CONST tipo ID OP_ASIG valor error
+        {: parser.report_error(
+               "Falta ';' al final de la constante",
+               CUP$parser$stack.peek()); :}
+    ;
+
+/* ══════════════════════════════════
+   LISTA DE IDENTIFICADORES
+   nombre
+   nombre, apellido
+   nombre, apellido, apodo
+══════════════════════════════════ */
+
+lista_ids
+    ::= lista_ids COMA ID
+    /* falta coma: int a b */
+    |   lista_ids error ID
+        {: parser.report_error(
+               "Falta ',' en declaración de variables",
+               CUP$parser$stack.peek()); :}
+    /* coma suelta sin ID siguiente: texto, ; */
+    |   lista_ids COMA error
+        {: parser.report_error(
+               "Identificador esperado después de ','",
+               CUP$parser$stack.peek()); :}
+    |   ID
+    ;
+
+/* ══════════════════════════════════
+   MÉTODOS
+   void registrar(int a, int b) { }
+   int calcular(int a) { }
+   int main() { }
+══════════════════════════════════ */
+
+declaracion_metodo
+    /* caso normal */
+    ::= tipo ID PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_metodo LLAVE_DER
+
+    /* int main() { } */
+    |   tipo PR_MAIN PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_metodo LLAVE_DER
+
+    /* Error: sin tipo de retorno */
+    |   ID PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_metodo LLAVE_DER
+        {: parser.report_error(
+               "Tipo de retorno inválido",
+               CUP$parser$stack.peek()); :}
+
+    /* Error: sin paréntesis */
+    |   tipo ID LLAVE_IZQ cuerpo_metodo LLAVE_DER
+        {: parser.report_error(
+               "Falta '(' o ')' en declaración de método",
+               CUP$parser$stack.peek()); :}
+
+    /* Error: falta ')' — recupera hasta encontrar '{' */
+    |   tipo ID PAREN_IZQ parametros error LLAVE_IZQ cuerpo_metodo LLAVE_DER
+        {: parser.report_error(
+               "Falta '(' o ')' en declaración de método",
+               CUP$parser$stack.peek()); :}
+
+    /* Error: método sin tipo, con parámetros malformados
+       calcular(int a int b) { } — recupera hasta '}' */
+    |   ID PAREN_IZQ error LLAVE_DER
+        {: parser.report_error(
+               "Tipo de retorno inválido o parámetros malformados",
+               CUP$parser$stack.peek()); :}
+    ;
+
+/* ══════════════════════════════════
+   TIPOS VÁLIDOS EN C++
 ══════════════════════════════════ */
 
 tipo
@@ -178,11 +356,26 @@ tipo
     |   PR_CHAR
     |   PR_STRING
     |   PR_VOID
-    |   ID
+    |   ID          /* tipos definidos por el usuario */
     ;
 
 /* ══════════════════════════════════
-   PARÁMETROS
+   VALORES (lado derecho de = )
+══════════════════════════════════ */
+
+valor
+    ::= LIT_ENTERO
+    |   LIT_DECIMAL
+    |   LIT_STRING
+    |   LIT_CHAR
+    |   LIT_BOOL
+    |   ID                          /* variable o constante existente */
+    |   OP_RESTA LIT_ENTERO         /* número negativo: -5  */
+    |   OP_RESTA LIT_DECIMAL        /* número negativo: -3.14 */
+    ;
+
+/* ══════════════════════════════════
+   PARÁMETROS DE MÉTODO
 ══════════════════════════════════ */
 
 parametros
@@ -193,7 +386,7 @@ parametros
 lista_parametros
     ::= lista_parametros COMA parametro
 
-    /* coma sobrante: float x, ) */
+    /* coma sobrante: int a, ) */
     |   lista_parametros COMA
         {: parser.report_error(
                "Parámetro inválido (coma sobrante al final de la lista)",
@@ -214,9 +407,63 @@ parametro
     ;
 
 /* ══════════════════════════════════
-   CUERPO DE FUNCIÓN (vacío por ahora)
+   CUERPO DE MÉTODO
+   Solo variables en esta práctica
 ══════════════════════════════════ */
 
-cuerpo_funcion
-    ::= /* vacío */
+cuerpo_metodo
+    ::= cuerpo_metodo_tail
+    |   /* cuerpo vacío */
+    ;
+
+/* lista_sentencias_metodo acepta variables válidas Y recupera
+   cualquier sentencia mal formada terminada en ';'            */
+lista_sentencias_metodo
+    ::= lista_sentencias_metodo variable
+    /* recupera sentencia mal formada terminada en ';' */
+    |   lista_sentencias_metodo error PUNTO_COMA
+        {: parser.report_error(
+               "Declaración inválida en cuerpo de método",
+               CUP$parser$stack.peek()); :}
+    |   variable
+    /* primera sentencia mal formada (sin lista previa), termina en ';' */
+    |   error PUNTO_COMA
+        {: parser.report_error(
+               "Declaración inválida en cuerpo de método",
+               CUP$parser$stack.peek()); :}
+    ;
+
+/* Permite que cuerpo_metodo absorba variables con falta de ';'
+   cuando el siguiente token es '}' — sin ';' al que recuperar  */
+cuerpo_metodo_tail
+    ::= lista_sentencias_metodo
+    |   lista_sentencias_metodo error
+        {: parser.report_error(
+               "Falta ';' en la última declaración del método",
+               CUP$parser$stack.peek()); :}
+    |   error
+        {: parser.report_error(
+               "Falta ';' en declaración de variable",
+               CUP$parser$stack.peek()); :}
+    ;
+
+/* ══════════════════════════════════
+   VARIABLES DENTRO DE MÉTODOS
+   int contador;
+   int total = 10;
+   String mensaje, texto;
+══════════════════════════════════ */
+
+variable
+    /* sin inicialización: int contador; */
+    ::= tipo lista_ids PUNTO_COMA
+
+    /* con inicialización: int total = 10; */
+    |   tipo lista_ids OP_ASIG valor PUNTO_COMA
+
+    /* Error: falta ';' con inicialización */
+    |   tipo lista_ids OP_ASIG valor error
+        {: parser.report_error(
+               "Falta ';' en declaración de variable",
+               CUP$parser$stack.peek()); :}
     ;

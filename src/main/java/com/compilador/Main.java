@@ -28,7 +28,6 @@ public class Main {
             System.out.println("╚══════════════════════════════════════╝\n");
 
             // 3. Ejecutar el análisis sintáctico
-            //    (que internamente también ejecuta el léxico)
             p.parse();
 
             // 4. Reporte final de errores

@@ -45,7 +45,7 @@ import com.compilador.parser.sym;
         return errors;
     }
 
-    /* ── Registrar error léxico (usa yytext() como token automáticamente) ── */
+    /* ── Registrar error léxico ── */
     private void addError(TipoError tipo, String msg) {
         errors.add(new CompilerError(tipo, msg, yyline + 1, yycolumn + 1, yytext()));
     }
@@ -63,16 +63,12 @@ ESPACIO = [ \t\r\n]+
   MACROS C++
 --------------*/
 
-/* Identificadores válidos */
-ID_CPP = {LETRA}({LETRA}|{DIGITO})*
-
-/* Números enteros y flotantes */
+ID_CPP  = {LETRA}({LETRA}|{DIGITO})*
 ENTERO  = {DIGITO}+
 DECIMAL = {DIGITO}+\.{DIGITO}+
 
 /*----------------------------------
   PATRONES PARA ERRORES (TRAMPAS)
-  DEBEN ir ANTES de las reglas generales
 ----------------------------------*/
 
 INVALID_ID      = {DIGITO}+{LETRA}+({LETRA}|{DIGITO})*
@@ -85,16 +81,25 @@ UNCLOSED_STRING = \"[^\"\n]*
   REGLAS LÉXICAS
 -----------------*/
 
-/* Espacios — ignorar */
 {ESPACIO}   { /* ignorar */ }
 
-/* Comentarios — ignorar */
 "//".*                                        { /* comentario de línea  */ }
 "/*" [^*]* "*"+ ([^/*] [^*]* "*"+)* "/"      { /* comentario de bloque */ }
 
 /* ══════════════════════════════════
-   PALABRAS RESERVADAS
-   (deben ir ANTES que la regla ID)
+   PALABRAS RESERVADAS — NUEVAS (A4)
+   Deben ir ANTES que las existentes
+═══════════════════════════════════ */
+"class"     { return symbol(sym.PR_CLASS);     }
+"const"     { return symbol(sym.PR_CONST);     }
+"public"    { return symbol(sym.PR_PUBLIC);    }
+"private"   { return symbol(sym.PR_PRIVATE);   }
+"protected" { return symbol(sym.PR_PROTECTED); }
+"true"      { return symbol(sym.LIT_BOOL, true);  }
+"false"     { return symbol(sym.LIT_BOOL, false); }
+
+/* ══════════════════════════════════
+   PALABRAS RESERVADAS — EXISTENTES
 ═══════════════════════════════════ */
 "int"       { return symbol(sym.PR_INT);    }
 "float"     { return symbol(sym.PR_FLOAT);  }
@@ -123,35 +128,24 @@ UNCLOSED_STRING = \"[^\"\n]*
 "endl"      { return symbol(sym.PR_ENDL);      }
 
 /* ══════════════════════════════════
-   OPERADORES
-   IMPORTANTE: los de 2 caracteres van ANTES que los de 1
+   OPERADORES (2 chars antes que 1)
 ═══════════════════════════════════ */
-
-/* Comparación */
 "=="    { return symbol(sym.OP_IGUAL);        }
 "!="    { return symbol(sym.OP_DIF);          }
 "<="    { return symbol(sym.OP_MENOR_IGUAL);  }
 ">="    { return symbol(sym.OP_MAYOR_IGUAL);  }
 "<"     { return symbol(sym.OP_MENOR);        }
 ">"     { return symbol(sym.OP_MAYOR);        }
-
-/* Lógicos */
-"&&"    { return symbol(sym.OP_AND); }
-"||"    { return symbol(sym.OP_OR);  }
-"!"     { return symbol(sym.OP_NOT); }
-
-/* Flujo cout/cin */
-"<<"    { return symbol(sym.OP_FLUJO_SAL); }
-">>"    { return symbol(sym.OP_FLUJO_ENT); }
-
-/* Aritméticos */
-"+"     { return symbol(sym.OP_SUMA);   }
-"-"     { return symbol(sym.OP_RESTA);  }
-"*"     { return symbol(sym.OP_MULT);   }
-"/"     { return symbol(sym.OP_DIV);    }
-
-/* Asignación */
-"="     { return symbol(sym.OP_ASIG); }
+"&&"    { return symbol(sym.OP_AND);          }
+"||"    { return symbol(sym.OP_OR);           }
+"!"     { return symbol(sym.OP_NOT);          }
+"<<"    { return symbol(sym.OP_FLUJO_SAL);    }
+">>"    { return symbol(sym.OP_FLUJO_ENT);    }
+"+"     { return symbol(sym.OP_SUMA);         }
+"-"     { return symbol(sym.OP_RESTA);        }
+"*"     { return symbol(sym.OP_MULT);         }
+"/"     { return symbol(sym.OP_DIV);          }
+"="     { return symbol(sym.OP_ASIG);         }
 
 /* ══════════════════════════════════
    DELIMITADORES
@@ -164,12 +158,11 @@ UNCLOSED_STRING = \"[^\"\n]*
 "}"     { return symbol(sym.LLAVE_DER); }
 "#"     { return symbol(sym.HASH);      }
 "::"    { return symbol(sym.DOBLE_DOS); }
+":"     { return symbol(sym.DOS_PUNTOS); }  /* NUEVO — para public: private: */
 
 /* ══════════════════════════════════
    TRAMPAS DE ERRORES
-   Van ANTES que las reglas generales de literales
 ═══════════════════════════════════ */
-
 {INVALID_ID} {
     addError(TipoError.LEXICO, "Identificador mal formado (inicia con número)");
 }
@@ -184,10 +177,9 @@ UNCLOSED_STRING = \"[^\"\n]*
 
 /* ══════════════════════════════════
    LITERALES E IDENTIFICADORES
-   Van AL FINAL para no pisar las palabras reservadas
 ═══════════════════════════════════ */
-
 \" [^\"\n]* \"  { return symbol(sym.LIT_STRING,  yytext()); }
+'\''[^\'\\]'\'' { return symbol(sym.LIT_CHAR,    yytext()); }  /* char literal 'x' */
 {DECIMAL}       { return symbol(sym.LIT_DECIMAL, Double.parseDouble(yytext())); }
 {ENTERO}        { return symbol(sym.LIT_ENTERO,  Integer.parseInt(yytext())); }
 {ID_CPP}        { return symbol(sym.ID, yytext()); }
