@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
+    <modelVersion>4.0.0</modelVersion>
     <groupId>com.compilador</groupId>
     <artifactId>compilador</artifactId>
     <version>1.0-SNAPSHOT</version>
@@ -15,21 +16,30 @@
     </properties>
 
     <dependencies>
+
+        <!-- Runtime de JCup: necesario al compilar Y ejecutar -->
         <dependency>
             <groupId>com.github.vbmacher</groupId>
             <artifactId>java-cup-runtime</artifactId>
             <version>11b-20160615</version>
         </dependency>
-        <dependency>
-            <groupId>de.jflex</groupId>
-            <artifactId>jflex</artifactId>
-            <version>1.9.1</version>
-        </dependency>
+
+        <!--
+            NOTA: jflex como dependencia NO es necesario en runtime.
+            El plugin de Maven ya descarga JFlex para la generación.
+            Se elimina para no tener dependencias innecesarias.
+        -->
+
     </dependencies>
 
     <build>
         <plugins>
-          <plugin>
+
+            <!--
+                PLUGIN 1: JCup — genera parser.java y sym.java
+                DEBE ir PRIMERO porque el scanner importa sym.java
+            -->
+            <plugin>
                 <groupId>com.github.vbmacher</groupId>
                 <artifactId>cup-maven-plugin</artifactId>
                 <version>11b-20160615</version>
@@ -39,37 +49,56 @@
                         <phase>generate-sources</phase>
                         <goals><goal>generate</goal></goals>
                         <configuration>
-                            <cupDefinition>${project.basedir}/src/main/cup/sintactico.cup</cupDefinition>
+                            <!-- Ruta al archivo .cup -->
+                            <cupDefinition>${project.basedir}/src/main/cup/cpp_sintactico.cup</cupDefinition>
+                            <!-- Directorio donde se generan parser.java y sym.java -->
                             <outputDirectory>${project.build.directory}/generated-sources/cup</outputDirectory>
+                            <!-- Nombres de las clases generadas -->
                             <className>parser</className>
                             <symbolsName>sym</symbolsName>
+                            <!-- Paquete de las clases generadas -->
                             <packageName>com.compilador.parser</packageName>
+                            <expect>2</expect>
                         </configuration>
                     </execution>
                 </executions>
             </plugin>
+
+            <!--
+                PLUGIN 2: JFlex — genera ScannerLexicoCpp.java
+                Va DESPUÉS de JCup porque el scanner importa sym
+            -->
             <plugin>
                 <groupId>de.jflex</groupId>
                 <artifactId>jflex-maven-plugin</artifactId>
                 <version>1.9.1</version>
                 <executions>
                     <execution>
-                        <goals>
-                            <goal>generate</goal>
-                        </goals>
+                        <id>generate-scanner</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>generate</goal></goals>
+                        <configuration>
+                            <!-- Carpeta raíz donde JFlex busca archivos .flex -->
+                            <sourceDirectory>${project.basedir}/src/main/jflex</sourceDirectory>
+                            <!-- Directorio donde se genera ScannerLexicoCpp.java -->
+                            <outputDirectory>${project.build.directory}/generated-sources/jflex</outputDirectory>
+                            <verbose>true</verbose>
+                        </configuration>
                     </execution>
                 </executions>
-                <configuration>
-                    <verbose>true</verbose>
-                </configuration>
             </plugin>
+
+            <!--
+                PLUGIN 3: build-helper — añade los directorios generados
+                al source path para que javac los encuentre
+            -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>build-helper-maven-plugin</artifactId>
                 <version>3.4.0</version>
                 <executions>
                     <execution>
-                        <id>add-source</id>
+                        <id>add-generated-sources</id>
                         <phase>generate-sources</phase>
                         <goals><goal>add-source</goal></goals>
                         <configuration>
@@ -81,6 +110,23 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <!--
+                PLUGIN 4: maven-jar — empaqueta con clase principal
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.compilador.Main</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+
         </plugins>
     </build>
 

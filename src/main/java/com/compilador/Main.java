@@ -1,34 +1,60 @@
 package com.compilador;
 
 import com.compilador.lexico.ScannerLexicoCpp;
+import com.compilador.parser.parser;
 
 import java.io.FileReader;
+import java.util.List;
 
 public class Main {
+
     public static void main(String[] args) {
-        String testFile = "test.txt";
-        
+
+        // Permite pasar el archivo como argumento, o usa test.cpp por defecto
+        String archivo = (args.length > 0) ? args[0] : "test.cpp";
+
         try {
+            FileReader reader = new FileReader(archivo);
 
-            FileReader reader = new FileReader(testFile);
+            // 1. Crear el scanner
+            ScannerLexicoCpp scanner = new ScannerLexicoCpp(reader);
 
-            ScannerLexicoCpp lexer = new ScannerLexicoCpp(reader);
+            // 2. Crear el parser pasándole el scanner
+            //    El parser usará la misma lista de errores del scanner
+            parser p = new parser(scanner);
 
-            lexer.yylex();
+            System.out.println("╔══════════════════════════════════════╗");
+            System.out.println("  Analizando: " + archivo);
+            System.out.println("╚══════════════════════════════════════╝\n");
 
-            System.out.println("Compilacion finalizada sin errores.");
+            // 3. Ejecutar el análisis sintáctico
+            //    (que internamente también ejecuta el léxico)
+            p.parse();
 
-            System.out.println(" -----Errores----- ");
-            if (lexer.getErrors().isEmpty()) {
-                System.out.println("No se encontraron errores.");
+            // 4. Reporte final de errores
+            List<CompilerError> errores = scanner.getErrors();
+
+            System.out.println();
+            System.out.println("══════════════ RESULTADO ══════════════");
+
+            if (errores.isEmpty()) {
+                System.out.println("✓  Sin errores. Compilación exitosa.");
             } else {
-                for (CompilerError error : lexer.getErrors()) {
-                    System.out.println(error);
+                System.out.println("✗  Se encontraron " + errores.size() + " error(es):\n");
+                System.out.printf("  %-18s  %-18s  %s%n",
+                        "Tipo", "Ubicación", "Descripción");
+                System.out.println("  " + "─".repeat(70));
+                for (CompilerError e : errores) {
+                    System.out.println("  " + e);
                 }
             }
 
+            System.out.println("═══════════════════════════════════════");
+
+        } catch (java.io.FileNotFoundException e) {
+            System.err.println("Error: No se encontró el archivo '" + archivo + "'");
         } catch (Exception e) {
-            System.err.println("Error al compilar: " + e.getMessage());
+            System.err.println("Error inesperado: " + e.getMessage());
         }
     }
 }
