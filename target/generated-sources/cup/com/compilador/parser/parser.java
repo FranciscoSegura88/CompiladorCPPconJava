@@ -455,7 +455,9 @@ class CUP$parser$actions {
           case 5: // directiva ::= HASH PR_INCLUDE OP_MENOR LIB_IOSTREAM OP_MAYOR 
             {
               Object RESULT =null;
-
+		
+     System.out.println("------------------------[[[INCLUDE]]] DETECTADO-----------------------");
+    
               CUP$parser$result = parser.getSymbolFactory().newSymbol("directiva",2, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;

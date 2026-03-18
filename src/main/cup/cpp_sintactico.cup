@@ -144,8 +144,10 @@ lista_directivas
 
 directiva
     ::= HASH PR_INCLUDE OP_MENOR LIB_IOSTREAM OP_MAYOR
+        {: System.out.println("------------------------[[[INCLUDE]]] DETECTADO-----------------------"); :}
     |   HASH PR_INCLUDE OP_MENOR ID OP_MAYOR
     |   PR_USING PR_NAMESPACE PR_STD PUNTO_COMA
+    
     |   HASH PR_INCLUDE error
         {: parser.report_error(
                "Directiva #include inválida",
