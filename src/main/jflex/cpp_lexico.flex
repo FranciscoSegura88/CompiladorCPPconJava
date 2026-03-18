@@ -87,8 +87,7 @@ UNCLOSED_STRING = \"[^\"\n]*
 "/*" [^*]* "*"+ ([^/*] [^*]* "*"+)* "/"      { /* comentario de bloque */ }
 
 /* ══════════════════════════════════
-   PALABRAS RESERVADAS — NUEVAS (A4)
-   Deben ir ANTES que las existentes
+   PALABRAS RESERVADAS
 ═══════════════════════════════════ */
 "class"     { return symbol(sym.PR_CLASS);     }
 "const"     { return symbol(sym.PR_CONST);     }
