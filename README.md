@@ -7,4 +7,4 @@ TODO:
 
 Dentro de un main
 
-Agregar print donde detecta cada cosa
+Agregar print donde detecta cada cosa 
