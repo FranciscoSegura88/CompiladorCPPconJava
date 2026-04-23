@@ -1,5 +1,7 @@
 /home/frank/Desktop/CompiladorJava/src/main/java/com/compilador/CompilerError.java
 /home/frank/Desktop/CompiladorJava/src/main/java/com/compilador/Main.java
+/home/frank/Desktop/CompiladorJava/src/main/java/com/compilador/semantico/SemanticError.java
+/home/frank/Desktop/CompiladorJava/src/main/java/com/compilador/semantico/SymbolTable.java
 /home/frank/Desktop/CompiladorJava/target/generated-sources/cup/com/compilador/parser/parser.java
 /home/frank/Desktop/CompiladorJava/target/generated-sources/cup/com/compilador/parser/sym.java
 /home/frank/Desktop/CompiladorJava/target/generated-sources/jflex/com/compilador/lexico/ScannerLexicoCpp.java

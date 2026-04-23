@@ -5,17 +5,20 @@
 package com.compilador.parser;
 
 import java_cup.runtime.*;
+import java.util.List;
+import java.util.ArrayList;
 import com.compilador.lexico.ScannerLexicoCpp;
 import com.compilador.CompilerError;
 import com.compilador.CompilerError.TipoError;
-
-/*═══════════════════════════════════════════════════════
-  CÓDIGO INYECTADO EN LA CLASE parser
-═══════════════════════════════════════════════════════*/
+import com.compilador.semantico.SymbolTable;
+import com.compilador.semantico.SymbolTable.Simbolo;
+import com.compilador.semantico.SemanticError;
+import com.compilador.semantico.SemanticError.TipoErrorSem;
 
 parser code {:
-
     private ScannerLexicoCpp scanner;
+    public  SymbolTable         tablaSimbolos = new SymbolTable();
+    public  List<SemanticError> erroresSem    = new ArrayList<>();
 
     public parser(ScannerLexicoCpp scanner) {
         this(scanner, new DefaultSymbolFactory());
@@ -24,69 +27,132 @@ parser code {:
 
     @Override
     public void report_error(String mensaje, Object info) {
-        int linea   = 0;
-        int columna = 0;
-        String token = "";
-
+        int linea = 0, columna = 0; String token = "";
         if (info instanceof Symbol) {
             Symbol s = (Symbol) info;
-            linea   = s.left;
-            columna = s.right;
+            linea = s.left; columna = s.right;
             if (s.value != null) token = s.value.toString();
         }
-
         scanner.getErrors().add(
-            new CompilerError(TipoError.SINTACTICO, mensaje, linea, columna, token)
-        );
+            new CompilerError(TipoError.SINTACTICO, mensaje, linea, columna, token));
+    }
+    @Override public void report_fatal_error(String m, Object i) { report_error(m, i); }
+    @Override public void syntax_error(Symbol t) {}
+    @Override public void unrecovered_syntax_error(Symbol t) {
+        report_error("Error de sintaxis no recuperable", t);
     }
 
-    @Override
-    public void report_fatal_error(String mensaje, Object info) {
-        report_error(mensaje, info);
+    public void errorSem(TipoErrorSem tipo, String msg, int lin, int col, String tok) {
+        erroresSem.add(new SemanticError(tipo, msg, lin, col, tok));
     }
 
-    @Override
-    public void syntax_error(Symbol cur_token) {
-        // Silenciado — los errores los capturan las reglas error de la gramática
+    public void declararSimbolo(String nombre, String tipo, boolean esConst,
+                                String valor, int lin, int col) {
+        boolean ok = tablaSimbolos.insertar(nombre, tipo, esConst, valor, lin, col);
+        if (!ok) errorSem(TipoErrorSem.REDECLARACION,
+            "Identificador '" + nombre + "' ya declarado en este ámbito",
+            lin, col, nombre);
     }
 
-    @Override
-    public void unrecovered_syntax_error(Symbol cur_token) {
-        report_error("Error de sintaxis no recuperable", cur_token);
+    /** Como declararSimbolo pero retorna true si se insertó (false = redeclaración) */
+    public boolean declararSimboloConRetorno(String nombre, String tipo, boolean esConst,
+                                             String valor, int lin, int col) {
+        boolean ok = tablaSimbolos.insertar(nombre, tipo, esConst, valor, lin, col);
+        if (!ok) errorSem(TipoErrorSem.REDECLARACION,
+            "Identificador '" + nombre + "' ya declarado en este ámbito",
+            lin, col, nombre);
+        return ok;
+    }
+
+    public String verificarUso(String nombre, int lin, int col) {
+        Simbolo s = tablaSimbolos.buscar(nombre);
+        if (s == null) {
+            errorSem(TipoErrorSem.NO_DECLARADO,
+                "Identificador '" + nombre + "' no declarado", lin, col, nombre);
+            return "unknown";
+        }
+        if (!s.inicializado)
+            errorSem(TipoErrorSem.USO_ANTES_DE_DECLARAR,
+                "Variable '" + nombre + "' usada antes de ser inicializada",
+                lin, col, nombre);
+        return s.tipo;
+    }
+
+    /** Solo verifica que esté declarado — no checa inicialización. Usar en LHS de asignación pura. */
+    public String verificarDeclarado(String nombre, int lin, int col) {
+        Simbolo s = tablaSimbolos.buscar(nombre);
+        if (s == null) {
+            errorSem(TipoErrorSem.NO_DECLARADO,
+                "Identificador '" + nombre + "' no declarado", lin, col, nombre);
+            return "unknown";
+        }
+        return s.tipo;
+    }
+
+    /** Declara un atributo de clase — marcado como inicializado (init por defecto en C++). */
+    public void declararAtributo(String nombre, String tipo, int lin, int col) {
+        boolean ok = tablaSimbolos.insertar(nombre, tipo, false, null, lin, col);
+        if (!ok) {
+            errorSem(TipoErrorSem.REDECLARACION,
+                "Identificador '" + nombre + "' ya declarado en este ámbito", lin, col, nombre);
+        } else {
+            Simbolo s = tablaSimbolos.buscarEnAmbitoActual(nombre);
+            if (s != null) s.inicializado = true;
+        }
+    }
+
+    /** Declara un parámetro formal — siempre marcado como inicializado. */
+    public void declararParametro(String nombre, String tipo, int lin, int col) {
+        boolean ok = tablaSimbolos.insertar(nombre, tipo, false, null, lin, col);
+        if (!ok) {
+            errorSem(TipoErrorSem.REDECLARACION,
+                "Parámetro '" + nombre + "' duplicado en este método", lin, col, nombre);
+        } else {
+            Simbolo s = tablaSimbolos.buscarEnAmbitoActual(nombre);
+            if (s != null) s.inicializado = true;
+        }
+    }
+
+    public void verificarAsignacion(String nombre, String tipoExpr, int lin, int col) {
+        Simbolo s = tablaSimbolos.buscar(nombre);
+        if (s == null) return;
+        if (s.esConstante) {
+            errorSem(TipoErrorSem.CONSTANTE_REASIGNADA,
+                "No se puede reasignar la constante '" + nombre + "'",
+                lin, col, nombre);
+            return;
+        }
+        if (tipoExpr != null && !tipoExpr.equals("unknown") &&
+            !SymbolTable.sonCompatibles(s.tipo, tipoExpr))
+            errorSem(TipoErrorSem.TIPO_INCOMPATIBLE,
+                "Tipo incompatible: no se puede asignar '" + tipoExpr +
+                "' a '" + nombre + "' de tipo '" + s.tipo + "'",
+                lin, col, nombre);
+        else
+            tablaSimbolos.actualizarValor(nombre, tipoExpr);
     }
 :};
 
-/*═══════════════════════════════════════════════════════
-  TERMINALES
-═══════════════════════════════════════════════════════*/
-
-/* Palabras reservadas — existentes */
+/*═══════════════ TERMINALES ═══════════════*/
 terminal PR_INT, PR_FLOAT, PR_BOOL, PR_CHAR, PR_STRING, PR_DOUBLE;
 terminal PR_VOID, PR_MAIN;
 terminal PR_IF, PR_ELSE, PR_WHILE, PR_DO, PR_RETURN;
 terminal PR_INCLUDE, PR_STD, PR_COUT, PR_CIN;
 terminal PR_USING, PR_NAMESPACE, PR_ENDL;
 terminal LIB_IOSTREAM;
-
-/* Palabras reservadas — NUEVAS (A4) */
-terminal PR_CLASS;
-terminal PR_CONST;
+terminal PR_CLASS, PR_CONST;
 terminal PR_PUBLIC, PR_PRIVATE, PR_PROTECTED;
-
-/* Operadores */
 terminal OP_SUMA, OP_RESTA, OP_MULT, OP_DIV;
 terminal OP_ASIG, OP_IGUAL, OP_DIF;
 terminal OP_MENOR, OP_MAYOR, OP_MENOR_IGUAL, OP_MAYOR_IGUAL;
 terminal OP_AND, OP_OR, OP_NOT;
 terminal OP_FLUJO_SAL, OP_FLUJO_ENT;
-
-/* Delimitadores */
+terminal OP_INC, OP_DEC;
+terminal OP_SUMA_ASIG, OP_RESTA_ASIG;
 terminal PUNTO_COMA, COMA, HASH;
 terminal PAREN_IZQ, PAREN_DER;
 terminal LLAVE_IZQ, LLAVE_DER;
-terminal DOBLE_DOS, DOS_PUNTOS;   /* DOS_PUNTOS = ':' para public: private: */
-
-/* Literales */
+terminal DOBLE_DOS, DOS_PUNTOS;
 terminal String  ID;
 terminal Integer LIT_ENTERO;
 terminal Double  LIT_DECIMAL;
@@ -94,378 +160,361 @@ terminal String  LIT_STRING;
 terminal String  LIT_CHAR;
 terminal Boolean LIT_BOOL;
 
-/*═══════════════════════════════════════════════════════
-  NO TERMINALES
-═══════════════════════════════════════════════════════*/
-
+/*═══════════════ NO TERMINALES ═══════════════*/
 non terminal programa;
 non terminal lista_directivas, directiva;
-non terminal lista_clases, clase;
+non terminal lista_clases, clase, abre_clase;
 non terminal cuerpo_clase, lista_miembros_clase, miembro_clase;
 non terminal seccion_acceso;
-non terminal atributo, constante, lista_ids;
+non terminal atributo, constante;
 non terminal declaracion_metodo;
-non terminal tipo, valor;
+non terminal String tipo;
+non terminal String valor;
 non terminal parametros, lista_parametros, parametro;
-non terminal cuerpo_metodo, cuerpo_metodo_tail, lista_sentencias_metodo, variable;
+non terminal cuerpo_metodo, cuerpo_metodo_tail;
+non terminal lista_sentencias, sentencia;
+non terminal variable;
+non terminal String expr;
+non terminal args_llamada, lista_args;
+non terminal abre_metodo, abre_main;
+non terminal flujo_salida;
 
-/*═══════════════════════════════════════════════════════
-  PRECEDENCIA
-═══════════════════════════════════════════════════════*/
-
+/*═══════════════ PRECEDENCIA ═══════════════*/
 precedence left  OP_OR;
 precedence left  OP_AND;
-precedence left  OP_IGUAL,  OP_DIF;
-precedence left  OP_MENOR,  OP_MAYOR, OP_MENOR_IGUAL, OP_MAYOR_IGUAL;
-precedence left  OP_SUMA,   OP_RESTA;
-precedence left  OP_MULT,   OP_DIV;
-precedence right OP_NOT;
+precedence left  OP_IGUAL, OP_DIF;
+precedence left  OP_MENOR, OP_MAYOR, OP_MENOR_IGUAL, OP_MAYOR_IGUAL;
+precedence left  OP_SUMA, OP_RESTA;
+precedence left  OP_MULT, OP_DIV;
+precedence right OP_NOT, OP_INC, OP_DEC;
 
 start with programa;
 
-/*═══════════════════════════════════════════════════════
-  REGLAS DE PRODUCCIÓN
-═══════════════════════════════════════════════════════*/
+/*═══════════════ REGLAS ═══════════════*/
 
-/* ── Programa ── */
-programa
-    ::= lista_directivas lista_clases
-    |   lista_clases
-    ;
+programa ::= lista_directivas lista_clases | lista_clases ;
 
-/* ══════════════════════════════════
-   DIRECTIVAS (#include / using)
-══════════════════════════════════ */
-
-lista_directivas
-    ::= lista_directivas directiva
-    |   directiva
-    ;
-
+/* ── Directivas ── */
+lista_directivas ::= lista_directivas directiva | directiva ;
 directiva
     ::= HASH PR_INCLUDE OP_MENOR LIB_IOSTREAM OP_MAYOR
-        {: System.out.println("------------------------[[[INCLUDE]]] DETECTADO-----------------------"); :}
     |   HASH PR_INCLUDE OP_MENOR ID OP_MAYOR
     |   PR_USING PR_NAMESPACE PR_STD PUNTO_COMA
-    
     |   HASH PR_INCLUDE error
-        {: parser.report_error(
-               "Directiva #include inválida",
-               CUP$parser$stack.peek()); :}
+        {: parser.report_error("Directiva #include inválida", CUP$parser$stack.peek()); :}
     ;
 
-/* ══════════════════════════════════
-   CLASES
-══════════════════════════════════ */
+/* ── Clases ── */
+lista_clases ::= lista_clases clase | clase ;
 
-lista_clases
-    ::= lista_clases clase
-    |   clase
-    ;
+/* abre_clase es un no-terminal vacío que ejecuta enterScope inmediatamente
+   al ver el nombre de la clase, antes de procesar el cuerpo */
 
 clase
-    /* class NombreClase { ... } */
-    ::= PR_CLASS ID LLAVE_IZQ cuerpo_clase LLAVE_DER
-
-    /* class NombreClase { ... }; — con punto y coma al final (estilo C++) */
-    |   PR_CLASS ID LLAVE_IZQ cuerpo_clase LLAVE_DER PUNTO_COMA
-
-    /* Error: nombre de clase inválido */
+    ::= PR_CLASS ID:n abre_clase LLAVE_IZQ cuerpo_clase LLAVE_DER
+        {: parser.tablaSimbolos.exitScope(); :}
+    |   PR_CLASS ID:n abre_clase LLAVE_IZQ cuerpo_clase LLAVE_DER PUNTO_COMA
+        {: parser.tablaSimbolos.exitScope(); :}
     |   PR_CLASS error LLAVE_IZQ cuerpo_clase LLAVE_DER
-        {: parser.report_error(
-               "Nombre de clase inválido",
-               CUP$parser$stack.peek()); :}
+        {: parser.report_error("Nombre de clase inválido", CUP$parser$stack.peek()); :}
     ;
 
-/* ══════════════════════════════════
-   CUERPO DE CLASE
-   Puede tener secciones public:/private:/protected:
-   mezcladas con miembros sin sección
-══════════════════════════════════ */
-
-cuerpo_clase
-    ::= lista_miembros_clase
-    |   /* clase vacía */
+abre_clase
+    ::= /* vacío */
+        {: // El ID ya está en el stack: buscamos el nombre de la clase
+           Symbol idSym = (Symbol) CUP$parser$stack.elementAt(CUP$parser$top);
+           String nombre = idSym.value != null ? idSym.value.toString() : "clase";
+           parser.tablaSimbolos.enterScope(nombre); :}
     ;
 
-lista_miembros_clase
-    ::= lista_miembros_clase miembro_clase
-    |   miembro_clase
-    ;
-
+cuerpo_clase   ::= lista_miembros_clase | /* vacío */ ;
+lista_miembros_clase ::= lista_miembros_clase miembro_clase | miembro_clase ;
 miembro_clase
-    /* Sección de acceso: public: private: protected: */
-    ::= seccion_acceso
-
-    /* Atributo: int edad; / float salario = 5000; */
-    |   atributo
-
-    /* Constante: const double PI = 3.1416; */
-    |   constante
-
-    /* Método: void registrar(int a) { } */
-    |   declaracion_metodo
-
-    /* Miembro inválido — recuperar hasta el siguiente ';' */
+    ::= seccion_acceso | atributo | constante | declaracion_metodo
     |   error PUNTO_COMA
-        {: parser.report_error(
-               "Declaración inválida en cuerpo de clase",
+        {: parser.report_error("Declaración inválida en cuerpo de clase",
                CUP$parser$stack.peek()); :}
     ;
 
-/* ── Secciones de acceso ── */
 seccion_acceso
     ::= PR_PUBLIC    DOS_PUNTOS
     |   PR_PRIVATE   DOS_PUNTOS
     |   PR_PROTECTED DOS_PUNTOS
-
-    /* Error: falta ':' después de public/private/protected */
-    |   PR_PUBLIC    error
-        {: parser.report_error(
-               "Falta ':' después de 'public'",
-               CUP$parser$stack.peek()); :}
-    |   PR_PRIVATE   error
-        {: parser.report_error(
-               "Falta ':' después de 'private'",
-               CUP$parser$stack.peek()); :}
-    |   PR_PROTECTED error
-        {: parser.report_error(
-               "Falta ':' después de 'protected'",
-               CUP$parser$stack.peek()); :}
+    |   PR_PUBLIC    error {: parser.report_error("Falta ':' después de 'public'",    CUP$parser$stack.peek()); :}
+    |   PR_PRIVATE   error {: parser.report_error("Falta ':' después de 'private'",   CUP$parser$stack.peek()); :}
+    |   PR_PROTECTED error {: parser.report_error("Falta ':' después de 'protected'", CUP$parser$stack.peek()); :}
     ;
 
-/* ══════════════════════════════════
-   ATRIBUTOS DE CLASE
-   int edad;
-   float salario = 5000;
-   String nombre, apellido;
-══════════════════════════════════ */
-
+/* ── Atributos (solo un ID por declaración para evitar conflictos) ── */
 atributo
-    /* sin inicialización: int edad; */
-    ::= tipo lista_ids PUNTO_COMA
-
-    /* con inicialización: float salario = 5000; */
-    |   tipo lista_ids OP_ASIG valor PUNTO_COMA
-
-    /* Error: falta ';' al final del atributo */
-    |   tipo lista_ids OP_ASIG valor error
-        {: parser.report_error(
-               "Falta ';' en declaración de atributo",
+    ::= tipo:t ID:n PUNTO_COMA
+        {: parser.declararAtributo((String)n,(String)t,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right); :}
+    |   tipo:t ID:n OP_ASIG valor:v PUNTO_COMA
+        {: parser.declararSimbolo((String)n,(String)t,false,(String)v,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).right); :}
+    |   tipo:t ID:n OP_ASIG valor error
+        {: parser.report_error("Falta ';' en declaración de atributo",
                CUP$parser$stack.peek()); :}
     ;
 
-/* ══════════════════════════════════
-   CONSTANTES
-   const double PI = 3.1416;
-   const int MAX = 100;
-══════════════════════════════════ */
-
+/* ── Constantes ── */
 constante
-    /* caso correcto: const tipo id = valor; */
-    ::= PR_CONST tipo ID OP_ASIG valor PUNTO_COMA
-
-    /* Error: constante sin inicializar — const tipo id; */
+    ::= PR_CONST tipo:t ID:n OP_ASIG valor:v PUNTO_COMA
+        {: parser.declararSimbolo((String)n,(String)t,true,(String)v,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).right); :}
     |   PR_CONST tipo ID PUNTO_COMA
-        {: parser.report_error(
-               "Constante debe inicializarse",
-               CUP$parser$stack.peek()); :}
-
-    /* Error: constante sin inicializar y sin ';' */
+        {: parser.report_error("Constante debe inicializarse", CUP$parser$stack.peek()); :}
     |   PR_CONST tipo ID error
-        {: parser.report_error(
-               "Constante debe inicializarse",
-               CUP$parser$stack.peek()); :}
-
-    /* Error: falta ';' al final de constante */
+        {: parser.report_error("Constante debe inicializarse", CUP$parser$stack.peek()); :}
     |   PR_CONST tipo ID OP_ASIG valor error
-        {: parser.report_error(
-               "Falta ';' al final de la constante",
-               CUP$parser$stack.peek()); :}
+        {: parser.report_error("Falta ';' al final de la constante", CUP$parser$stack.peek()); :}
     ;
 
-/* ══════════════════════════════════
-   LISTA DE IDENTIFICADORES
-   nombre
-   nombre, apellido
-   nombre, apellido, apodo
-══════════════════════════════════ */
-
-lista_ids
-    ::= lista_ids COMA ID
-    /* falta coma: int a b */
-    |   lista_ids error ID
-        {: parser.report_error(
-               "Falta ',' en declaración de variables",
-               CUP$parser$stack.peek()); :}
-    /* coma suelta sin ID siguiente: texto, ; */
-    |   lista_ids COMA error
-        {: parser.report_error(
-               "Identificador esperado después de ','",
-               CUP$parser$stack.peek()); :}
-    |   ID
-    ;
-
-/* ══════════════════════════════════
-   MÉTODOS
-   void registrar(int a, int b) { }
-   int calcular(int a) { }
-   int main() { }
-══════════════════════════════════ */
-
+/* ── Métodos ── */
 declaracion_metodo
-    /* caso normal */
-    ::= tipo ID PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_metodo LLAVE_DER
+    ::= tipo:t ID:n abre_metodo PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_metodo LLAVE_DER
+        {: parser.tablaSimbolos.exitScope();
+           if (parser.tablaSimbolos.buscarEnAmbitoActual("__m__"+(String)n) != null)
+               parser.errorSem(TipoErrorSem.METODO_DUPLICADO,
+                   "Método '" + n + "' ya declarado",
+                   ((Symbol)CUP$parser$stack.peek()).left,
+                   ((Symbol)CUP$parser$stack.peek()).right, (String)n);
+           else
+               parser.tablaSimbolos.insertar("__m__"+(String)n,(String)t,false,null,
+                   ((Symbol)CUP$parser$stack.peek()).left,
+                   ((Symbol)CUP$parser$stack.peek()).right); :}
 
-    /* int main() { } */
-    |   tipo PR_MAIN PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_metodo LLAVE_DER
+    |   tipo PR_MAIN abre_main PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_metodo LLAVE_DER
+        {: parser.tablaSimbolos.exitScope(); :}
 
-    /* Error: sin tipo de retorno */
     |   ID PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_metodo LLAVE_DER
-        {: parser.report_error(
-               "Tipo de retorno inválido",
-               CUP$parser$stack.peek()); :}
+        {: parser.report_error("Tipo de retorno inválido", CUP$parser$stack.peek()); :}
 
-    /* Error: sin paréntesis */
     |   tipo ID LLAVE_IZQ cuerpo_metodo LLAVE_DER
-        {: parser.report_error(
-               "Falta '(' o ')' en declaración de método",
+        {: parser.report_error("Falta '(' o ')' en declaración de método",
                CUP$parser$stack.peek()); :}
 
-    /* Error: falta ')' — recupera hasta encontrar '{' */
-    |   tipo ID PAREN_IZQ parametros error LLAVE_IZQ cuerpo_metodo LLAVE_DER
-        {: parser.report_error(
-               "Falta '(' o ')' en declaración de método",
-               CUP$parser$stack.peek()); :}
-
-    /* Error: método sin tipo, con parámetros malformados
-       calcular(int a int b) { } — recupera hasta '}' */
     |   ID PAREN_IZQ error LLAVE_DER
-        {: parser.report_error(
-               "Tipo de retorno inválido o parámetros malformados",
+        {: parser.report_error("Tipo de retorno inválido o parámetros malformados",
                CUP$parser$stack.peek()); :}
     ;
 
-/* ══════════════════════════════════
-   TIPOS VÁLIDOS EN C++
-══════════════════════════════════ */
+abre_metodo
+    ::= /* vacío */
+        {: Symbol idSym = (Symbol) CUP$parser$stack.elementAt(CUP$parser$top);
+           String nombre = (idSym.value != null) ? idSym.value.toString() : "metodo";
+           parser.tablaSimbolos.enterScope(nombre); :}
+    ;
 
+abre_main
+    ::= /* vacío */
+        {: parser.tablaSimbolos.enterScope("main"); :}
+    ;
+
+/* ── Tipos ── */
 tipo
-    ::= PR_INT
-    |   PR_FLOAT
-    |   PR_DOUBLE
-    |   PR_BOOL
-    |   PR_CHAR
-    |   PR_STRING
-    |   PR_VOID
-    |   ID          /* tipos definidos por el usuario */
+    ::= PR_INT    {: RESULT="int";    :} | PR_FLOAT  {: RESULT="float";  :}
+    |   PR_DOUBLE {: RESULT="double"; :} | PR_BOOL   {: RESULT="bool";   :}
+    |   PR_CHAR   {: RESULT="char";   :} | PR_STRING {: RESULT="string"; :}
+    |   PR_VOID   {: RESULT="void";   :} | ID:n      {: RESULT=(String)n; :}
     ;
 
-/* ══════════════════════════════════
-   VALORES (lado derecho de = )
-══════════════════════════════════ */
-
+/* ── Valores literales ── */
 valor
-    ::= LIT_ENTERO
-    |   LIT_DECIMAL
-    |   LIT_STRING
-    |   LIT_CHAR
-    |   LIT_BOOL
-    |   ID                          /* variable o constante existente */
-    |   OP_RESTA LIT_ENTERO         /* número negativo: -5  */
-    |   OP_RESTA LIT_DECIMAL        /* número negativo: -3.14 */
+    ::= LIT_ENTERO              {: RESULT="int";    :}
+    |   LIT_DECIMAL             {: RESULT="float";  :}
+    |   LIT_STRING              {: RESULT="string"; :}
+    |   LIT_CHAR                {: RESULT="char";   :}
+    |   LIT_BOOL                {: RESULT="bool";   :}
+    |   ID:n                    {: RESULT=parser.verificarUso((String)n,
+                                       ((Symbol)CUP$parser$stack.peek()).left,
+                                       ((Symbol)CUP$parser$stack.peek()).right); :}
+    |   OP_RESTA LIT_ENTERO     {: RESULT="int";    :}
+    |   OP_RESTA LIT_DECIMAL    {: RESULT="float";  :}
     ;
 
-/* ══════════════════════════════════
-   PARÁMETROS DE MÉTODO
-══════════════════════════════════ */
-
-parametros
-    ::= lista_parametros
-    |   /* sin parámetros */
-    ;
-
+/* ── Parámetros ── */
+parametros ::= lista_parametros | /* vacío */ ;
 lista_parametros
     ::= lista_parametros COMA parametro
-
-    /* coma sobrante: int a, ) */
     |   lista_parametros COMA
-        {: parser.report_error(
-               "Parámetro inválido (coma sobrante al final de la lista)",
-               CUP$parser$stack.peek()); :}
-
+        {: parser.report_error("Parámetro inválido (coma sobrante)", CUP$parser$stack.peek()); :}
     |   parametro
     ;
-
 parametro
-    /* caso normal: int a */
-    ::= tipo ID
-
-    /* falta nombre o falta coma: int , int b  /  int a int b */
+    ::= tipo:t ID:n
+        {: parser.declararParametro((String)n,(String)t,
+               ((Symbol)CUP$parser$stack.peek()).left,
+               ((Symbol)CUP$parser$stack.peek()).right); :}
     |   tipo error
-        {: parser.report_error(
-               "Parámetro inválido (falta nombre o falta ',' entre parámetros)",
+        {: parser.report_error("Parámetro inválido (falta nombre o falta ',')",
                CUP$parser$stack.peek()); :}
     ;
 
-/* ══════════════════════════════════
-   CUERPO DE MÉTODO
-   Solo variables en esta práctica
-══════════════════════════════════ */
-
-cuerpo_metodo
-    ::= cuerpo_metodo_tail
-    |   /* cuerpo vacío */
-    ;
-
-/* lista_sentencias_metodo acepta variables válidas Y recupera
-   cualquier sentencia mal formada terminada en ';'            */
-lista_sentencias_metodo
-    ::= lista_sentencias_metodo variable
-    /* recupera sentencia mal formada terminada en ';' */
-    |   lista_sentencias_metodo error PUNTO_COMA
-        {: parser.report_error(
-               "Declaración inválida en cuerpo de método",
-               CUP$parser$stack.peek()); :}
-    |   variable
-    /* primera sentencia mal formada (sin lista previa), termina en ';' */
-    |   error PUNTO_COMA
-        {: parser.report_error(
-               "Declaración inválida en cuerpo de método",
-               CUP$parser$stack.peek()); :}
-    ;
-
-/* Permite que cuerpo_metodo absorba variables con falta de ';'
-   cuando el siguiente token es '}' — sin ';' al que recuperar  */
+/* ── Cuerpo de método ── */
+cuerpo_metodo ::= cuerpo_metodo_tail | /* vacío */ ;
 cuerpo_metodo_tail
-    ::= lista_sentencias_metodo
-    |   lista_sentencias_metodo error
-        {: parser.report_error(
-               "Falta ';' en la última declaración del método",
+    ::= lista_sentencias
+    |   lista_sentencias error
+        {: parser.report_error("Falta ';' en la última declaración del método",
                CUP$parser$stack.peek()); :}
     |   error
-        {: parser.report_error(
-               "Falta ';' en declaración de variable",
+        {: parser.report_error("Error en cuerpo de método", CUP$parser$stack.peek()); :}
+    ;
+
+lista_sentencias
+    ::= lista_sentencias sentencia
+    |   lista_sentencias error PUNTO_COMA
+        {: parser.report_error("Declaración inválida en cuerpo de método",
+               CUP$parser$stack.peek()); :}
+    |   sentencia
+    |   error PUNTO_COMA
+        {: parser.report_error("Declaración inválida en cuerpo de método",
                CUP$parser$stack.peek()); :}
     ;
 
-/* ══════════════════════════════════
-   VARIABLES DENTRO DE MÉTODOS
-   int contador;
-   int total = 10;
-   String mensaje, texto;
-══════════════════════════════════ */
+/* ── Sentencias ── */
+sentencia
+    /* declaración de variable */
+    ::= variable
 
+    /* asignación: x = expr; */
+    |   ID:n OP_ASIG expr:t PUNTO_COMA
+        {: int l=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left;
+           int c=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right;
+           parser.verificarDeclarado((String)n,l,c);
+           parser.verificarAsignacion((String)n,(String)t,l,c); :}
+
+    /* x += expr; */
+    |   ID:n OP_SUMA_ASIG expr PUNTO_COMA
+        {: parser.verificarUso((String)n,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right); :}
+
+    /* x -= expr; */
+    |   ID:n OP_RESTA_ASIG expr PUNTO_COMA
+        {: parser.verificarUso((String)n,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right); :}
+
+    /* x++; x--; */
+    |   ID:n OP_INC PUNTO_COMA
+        {: parser.verificarUso((String)n,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right); :}
+    |   ID:n OP_DEC PUNTO_COMA
+        {: parser.verificarUso((String)n,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right); :}
+
+    /* llamada: metodo(args); */
+    |   ID:n PAREN_IZQ args_llamada PAREN_DER PUNTO_COMA
+        {: if (parser.tablaSimbolos.buscar("__m__"+(String)n)==null)
+               parser.errorSem(TipoErrorSem.NO_DECLARADO,
+                   "Método '"+n+"' no declarado",
+                   ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).left,
+                   ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).right,(String)n); :}
+
+    /* cout << expr << expr << endl; */
+    |   PR_COUT flujo_salida PUNTO_COMA
+
+    /* cin >> ID; */
+    |   PR_CIN OP_FLUJO_ENT ID:n PUNTO_COMA
+        {: parser.verificarUso((String)n,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right); :}
+
+    /* return */
+    |   PR_RETURN expr PUNTO_COMA
+    |   PR_RETURN PUNTO_COMA
+
+    /* if / if-else */
+    |   PR_IF PAREN_IZQ expr PAREN_DER LLAVE_IZQ lista_sentencias LLAVE_DER
+    |   PR_IF PAREN_IZQ expr PAREN_DER LLAVE_IZQ lista_sentencias LLAVE_DER
+        PR_ELSE LLAVE_IZQ lista_sentencias LLAVE_DER
+
+    /* while */
+    |   PR_WHILE PAREN_IZQ expr PAREN_DER LLAVE_IZQ lista_sentencias LLAVE_DER
+    ;
+
+/* ── Expresiones ── */
+expr
+    ::= expr:a OP_SUMA  expr:b {: RESULT=SymbolTable.tipoResultanteAritmetico((String)a,(String)b); :}
+    |   expr:a OP_RESTA expr:b {: RESULT=SymbolTable.tipoResultanteAritmetico((String)a,(String)b); :}
+    |   expr:a OP_MULT  expr:b {: RESULT=SymbolTable.tipoResultanteAritmetico((String)a,(String)b); :}
+    |   expr:a OP_DIV   expr:b {: RESULT=SymbolTable.tipoResultanteAritmetico((String)a,(String)b); :}
+    |   expr OP_IGUAL       expr {: RESULT="bool"; :}
+    |   expr OP_DIF         expr {: RESULT="bool"; :}
+    |   expr OP_MENOR       expr {: RESULT="bool"; :}
+    |   expr OP_MAYOR       expr {: RESULT="bool"; :}
+    |   expr OP_MENOR_IGUAL expr {: RESULT="bool"; :}
+    |   expr OP_MAYOR_IGUAL expr {: RESULT="bool"; :}
+    |   expr OP_AND expr         {: RESULT="bool"; :}
+    |   expr OP_OR  expr         {: RESULT="bool"; :}
+    |   OP_NOT expr              {: RESULT="bool"; :}
+    |   OP_RESTA expr:t          {: RESULT=(String)t; :}
+    |   PAREN_IZQ expr:t PAREN_DER {: RESULT=(String)t; :}
+    /* llamada dentro de expr: f(args) */
+    |   ID:n PAREN_IZQ args_llamada PAREN_DER
+        {: Simbolo m=parser.tablaSimbolos.buscar("__m__"+(String)n);
+           if (m==null) {
+               parser.errorSem(TipoErrorSem.NO_DECLARADO,"Método '"+n+"' no declarado",
+                   ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left,
+                   ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right,(String)n);
+               RESULT="unknown";
+           } else RESULT=m.tipo; :}
+    /* literales e IDs */
+    |   LIT_ENTERO              {: RESULT="int";    :}
+    |   LIT_DECIMAL             {: RESULT="float";  :}
+    |   LIT_STRING              {: RESULT="string"; :}
+    |   LIT_CHAR                {: RESULT="char";   :}
+    |   LIT_BOOL                {: RESULT="bool";   :}
+    |   ID:n
+        {: RESULT=parser.verificarUso((String)n,
+               ((Symbol)CUP$parser$stack.peek()).left,
+               ((Symbol)CUP$parser$stack.peek()).right); :}
+    ;
+
+/* ── Args de llamada ── */
+args_llamada ::= lista_args | /* vacío */ ;
+lista_args   ::= lista_args COMA expr | expr ;
+
+/* ── Flujo de salida (cout << a << b << endl) ── */
+flujo_salida
+    ::= flujo_salida OP_FLUJO_SAL expr
+    |   flujo_salida OP_FLUJO_SAL PR_ENDL
+    |   OP_FLUJO_SAL expr
+    |   OP_FLUJO_SAL PR_ENDL
+    ;
+
+/* ── Variables (solo un ID por producción) ── */
 variable
-    /* sin inicialización: int contador; */
-    ::= tipo lista_ids PUNTO_COMA
+    /* int x; */
+    ::= tipo:t ID:n PUNTO_COMA
+        {: parser.declararSimbolo((String)n,(String)t,false,null,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right); :}
 
-    /* con inicialización: int total = 10; */
-    |   tipo lista_ids OP_ASIG valor PUNTO_COMA
+    /* int x = expr; */
+    |   tipo:t ID:n OP_ASIG expr:te PUNTO_COMA
+        {: int l=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).left;
+           int c=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).right;
+           boolean ok = parser.declararSimboloConRetorno((String)n,(String)t,false,(String)te,l,c);
+           if (ok && te!=null && !te.equals("unknown") &&
+               !SymbolTable.sonCompatibles((String)t,(String)te)) {
+               parser.errorSem(TipoErrorSem.TIPO_INCOMPATIBLE,
+                   "Tipo incompatible: no se puede asignar '"+te+
+                   "' a '"+n+"' de tipo '"+t+"'",l,c,(String)n);
+               // forzar inserción para que no aparezca como "no declarado" después
+               parser.tablaSimbolos.insertarForzado((String)n,(String)t,false,null,l,c);
+           } :}
 
-    /* Error: falta ';' con inicialización */
-    |   tipo lista_ids OP_ASIG valor error
-        {: parser.report_error(
-               "Falta ';' en declaración de variable",
+    /* error: falta ; */
+    |   tipo:t ID:n OP_ASIG expr error
+        {: parser.report_error("Falta ';' en declaración de variable",
                CUP$parser$stack.peek()); :}
     ;

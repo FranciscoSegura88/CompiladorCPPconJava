@@ -2,10 +2,6 @@
 | SEGURA VALENCIA FRANCISCO |
 ---------------------------*/
 
-/*-------------------
-  Código de usuario
--------------------*/
-
 package com.compilador.lexico;
 
 import java.util.ArrayList;
@@ -14,10 +10,6 @@ import java_cup.runtime.*;
 import com.compilador.CompilerError;
 import com.compilador.CompilerError.TipoError;
 import com.compilador.parser.sym;
-
-/*-----------------------------
-  Configuración y Declaraciones
------------------------------*/
 
 %%
 
@@ -29,7 +21,6 @@ import com.compilador.parser.sym;
 %column
 
 %{
-    /* ── Helpers para crear Symbols con línea/columna ── */
     private Symbol symbol(int type) {
         return new Symbol(type, yyline + 1, yycolumn + 1);
     }
@@ -38,38 +29,22 @@ import com.compilador.parser.sym;
         return new Symbol(type, yyline + 1, yycolumn + 1, value);
     }
 
-    /* ── Lista de errores compartida con el parser ── */
     private final List<CompilerError> errors = new ArrayList<>();
 
-    public List<CompilerError> getErrors() {
-        return errors;
-    }
+    public List<CompilerError> getErrors() { return errors; }
 
-    /* ── Registrar error léxico ── */
     private void addError(TipoError tipo, String msg) {
         errors.add(new CompilerError(tipo, msg, yyline + 1, yycolumn + 1, yytext()));
     }
 %}
 
-/*--------
-  MACROS
---------*/
-
 DIGITO  = [0-9]
 LETRA   = [A-Za-z_]
 ESPACIO = [ \t\r\n]+
 
-/*--------------
-  MACROS C++
---------------*/
-
 ID_CPP  = {LETRA}({LETRA}|{DIGITO})*
 ENTERO  = {DIGITO}+
 DECIMAL = {DIGITO}+\.{DIGITO}+
-
-/*----------------------------------
-  PATRONES PARA ERRORES (TRAMPAS)
-----------------------------------*/
 
 INVALID_ID      = {DIGITO}+{LETRA}+({LETRA}|{DIGITO})*
 INVALID_NUM     = {DIGITO}+\.{DIGITO}+\.({DIGITO}|\.)*
@@ -77,29 +52,21 @@ UNCLOSED_STRING = \"[^\"\n]*
 
 %%
 
-/*-----------------
-  REGLAS LÉXICAS
------------------*/
-
 {ESPACIO}   { /* ignorar */ }
 
 "//".*                                        { /* comentario de línea  */ }
 "/*" [^*]* "*"+ ([^/*] [^*]* "*"+)* "/"      { /* comentario de bloque */ }
 
-/* ══════════════════════════════════
-   PALABRAS RESERVADAS
-═══════════════════════════════════ */
+/* ══ Palabras reservadas — NUEVAS (A4/A7) ══ */
 "class"     { return symbol(sym.PR_CLASS);     }
 "const"     { return symbol(sym.PR_CONST);     }
 "public"    { return symbol(sym.PR_PUBLIC);    }
 "private"   { return symbol(sym.PR_PRIVATE);   }
 "protected" { return symbol(sym.PR_PROTECTED); }
-"true"      { return symbol(sym.LIT_BOOL, true);  }
-"false"     { return symbol(sym.LIT_BOOL, false); }
+"true"      { return symbol(sym.LIT_BOOL, Boolean.TRUE);  }
+"false"     { return symbol(sym.LIT_BOOL, Boolean.FALSE); }
 
-/* ══════════════════════════════════
-   PALABRAS RESERVADAS — EXISTENTES
-═══════════════════════════════════ */
+/* ══ Palabras reservadas — existentes ══ */
 "int"       { return symbol(sym.PR_INT);    }
 "float"     { return symbol(sym.PR_FLOAT);  }
 "bool"      { return symbol(sym.PR_BOOL);   }
@@ -114,9 +81,7 @@ UNCLOSED_STRING = \"[^\"\n]*
 "return"    { return symbol(sym.PR_RETURN); }
 "double"    { return symbol(sym.PR_DOUBLE); }
 
-/* ══════════════════════════════════
-   LIBRERÍAS Y DIRECTIVAS
-═══════════════════════════════════ */
+/* ══ Librerías / directivas ══ */
 "include"   { return symbol(sym.PR_INCLUDE);   }
 "iostream"  { return symbol(sym.LIB_IOSTREAM); }
 "std"       { return symbol(sym.PR_STD);       }
@@ -126,9 +91,13 @@ UNCLOSED_STRING = \"[^\"\n]*
 "namespace" { return symbol(sym.PR_NAMESPACE); }
 "endl"      { return symbol(sym.PR_ENDL);      }
 
-/* ══════════════════════════════════
-   OPERADORES (2 chars antes que 1)
-═══════════════════════════════════ */
+/* ══ Operadores — NUEVOS (A7): ++, --, +=, -= antes de + - ══ */
+"++"    { return symbol(sym.OP_INC);        }
+"--"    { return symbol(sym.OP_DEC);        }
+"+="    { return symbol(sym.OP_SUMA_ASIG);  }
+"-="    { return symbol(sym.OP_RESTA_ASIG); }
+
+/* ══ Operadores — existentes (2 chars antes de 1) ══ */
 "=="    { return symbol(sym.OP_IGUAL);        }
 "!="    { return symbol(sym.OP_DIF);          }
 "<="    { return symbol(sym.OP_MENOR_IGUAL);  }
@@ -146,9 +115,7 @@ UNCLOSED_STRING = \"[^\"\n]*
 "/"     { return symbol(sym.OP_DIV);          }
 "="     { return symbol(sym.OP_ASIG);         }
 
-/* ══════════════════════════════════
-   DELIMITADORES
-═══════════════════════════════════ */
+/* ══ Delimitadores ══ */
 ";"     { return symbol(sym.PUNTO_COMA); }
 ","     { return symbol(sym.COMA);       }
 "("     { return symbol(sym.PAREN_IZQ); }
@@ -157,35 +124,27 @@ UNCLOSED_STRING = \"[^\"\n]*
 "}"     { return symbol(sym.LLAVE_DER); }
 "#"     { return symbol(sym.HASH);      }
 "::"    { return symbol(sym.DOBLE_DOS); }
-":"     { return symbol(sym.DOS_PUNTOS); }  /* NUEVO — para public: private: */
+":"     { return symbol(sym.DOS_PUNTOS); }
 
-/* ══════════════════════════════════
-   TRAMPAS DE ERRORES
-═══════════════════════════════════ */
+/* ══ Trampas de errores ══ */
 {INVALID_ID} {
     addError(TipoError.LEXICO, "Identificador mal formado (inicia con número)");
 }
-
 {INVALID_NUM} {
     addError(TipoError.LEXICO, "Número mal formado (múltiples puntos decimales)");
 }
-
 {UNCLOSED_STRING} {
     addError(TipoError.LEXICO, "Cadena de texto no cerrada (falta comilla de cierre)");
 }
 
-/* ══════════════════════════════════
-   LITERALES E IDENTIFICADORES
-═══════════════════════════════════ */
-\" [^\"\n]* \"  { return symbol(sym.LIT_STRING,  yytext()); }
-'\''[^\'\\]'\'' { return symbol(sym.LIT_CHAR,    yytext()); }  /* char literal 'x' */
-{DECIMAL}       { return symbol(sym.LIT_DECIMAL, Double.parseDouble(yytext())); }
-{ENTERO}        { return symbol(sym.LIT_ENTERO,  Integer.parseInt(yytext())); }
-{ID_CPP}        { return symbol(sym.ID, yytext()); }
+/* ══ Literales e identificadores ══ */
+\" [^\"\n]* \"        { return symbol(sym.LIT_STRING,  yytext()); }
+\' [^\'\n] \'         { return symbol(sym.LIT_CHAR,    yytext()); }
+{DECIMAL}             { return symbol(sym.LIT_DECIMAL, Double.parseDouble(yytext())); }
+{ENTERO}              { return symbol(sym.LIT_ENTERO,  Integer.parseInt(yytext())); }
+{ID_CPP}              { return symbol(sym.ID,          yytext()); }
 
-/* ══════════════════════════════════
-   CUALQUIER OTRO CARÁCTER
-═══════════════════════════════════ */
+/* ══ Cualquier otro carácter ══ */
 . {
     addError(TipoError.FATAL, "Carácter no reconocido");
 }
