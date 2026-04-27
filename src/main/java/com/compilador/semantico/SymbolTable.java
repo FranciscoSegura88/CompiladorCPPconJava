@@ -148,7 +148,9 @@ public class SymbolTable {
     public static boolean sonCompatibles(String dest, String orig) {
         if (dest == null || orig == null) return true;
         if (dest.equals(orig)) return true;
+        // widening numeric conversions: int→float→double
         if (dest.equals("double") && (orig.equals("float") || orig.equals("int"))) return true;
+        if (dest.equals("float") && orig.equals("int")) return true;
         return false;
     }
 

@@ -705,6 +705,80 @@ public class parser extends java_cup.runtime.lr_parser {
             tablaSimbolos.actualizarValor(nombre, tipoExpr);
     }
 
+    /** Verifica operación aritmética binaria: ambos operandos deben ser numéricos. */
+    public String verificarAritmetico(String t1, String t2, String op, int lin, int col) {
+        if (t1 == null || t2 == null || "unknown".equals(t1) || "unknown".equals(t2))
+            return "unknown";
+        String res = SymbolTable.tipoResultanteAritmetico(t1, t2);
+        if (res == null) {
+            errorSem(TipoErrorSem.TIPO_INCOMPATIBLE,
+                "Operador '" + op + "' requiere operandos numéricos (int/float/double), " +
+                "se encontraron tipos '" + t1 + "' y '" + t2 + "'",
+                lin, col, op);
+            return "unknown";
+        }
+        return res;
+    }
+
+    /** Verifica negación unaria: el operando debe ser numérico. */
+    public String verificarNegacion(String t, int lin, int col) {
+        if (t == null || "unknown".equals(t)) return "unknown";
+        java.util.Set<String> num = java.util.Set.of("int","float","double");
+        if (!num.contains(t)) {
+            errorSem(TipoErrorSem.TIPO_INCOMPATIBLE,
+                "Operador unario '-' requiere operando numérico, se encontró tipo '" + t + "'",
+                lin, col, "-");
+            return "unknown";
+        }
+        return t;
+    }
+
+    /** Verifica operadores lógicos binarios (&&, ||): ambos operandos deben ser bool. */
+    public String verificarLogico(String t1, String t2, String op, int lin, int col) {
+        if (!"unknown".equals(t1) && !"bool".equals(t1))
+            errorSem(TipoErrorSem.TIPO_INCOMPATIBLE,
+                "Operador '" + op + "' requiere operandos booleanos, " +
+                "operando izquierdo es de tipo '" + t1 + "'",
+                lin, col, op);
+        if (!"unknown".equals(t2) && !"bool".equals(t2))
+            errorSem(TipoErrorSem.TIPO_INCOMPATIBLE,
+                "Operador '" + op + "' requiere operandos booleanos, " +
+                "operando derecho es de tipo '" + t2 + "'",
+                lin, col, op);
+        return "bool";
+    }
+
+    /** Verifica operador NOT (!): el operando debe ser bool. */
+    public String verificarNot(String t, int lin, int col) {
+        if (t != null && !"unknown".equals(t) && !"bool".equals(t))
+            errorSem(TipoErrorSem.TIPO_INCOMPATIBLE,
+                "Operador '!' requiere operando booleano, se encontró tipo '" + t + "'",
+                lin, col, "!");
+        return "bool";
+    }
+
+    /** Verifica comparación: los tipos deben ser compatibles entre sí. */
+    public String verificarComparacion(String t1, String t2, String op, int lin, int col) {
+        if (t1 == null || t2 == null) return "bool";
+        if ("unknown".equals(t1) || "unknown".equals(t2)) return "bool";
+        java.util.Set<String> num = java.util.Set.of("int","float","double");
+        boolean n1 = num.contains(t1), n2 = num.contains(t2);
+        if (n1 != n2) {
+            errorSem(TipoErrorSem.TIPO_INCOMPATIBLE,
+                "Comparación '" + op + "' inválida entre tipo numérico '" +
+                (n1 ? t1 : t2) + "' y tipo no numérico '" + (n1 ? t2 : t1) + "'",
+                lin, col, op);
+            return "bool";
+        }
+        if (!op.equals("==") && !op.equals("!=") &&
+            ("bool".equals(t1) || "string".equals(t1))) {
+            errorSem(TipoErrorSem.TIPO_INCOMPATIBLE,
+                "Operador de comparación '" + op + "' no aplicable a tipo '" + t1 + "'",
+                lin, col, op);
+        }
+        return "bool";
+    }
+
 
 /** Cup generated class to encapsulate user supplied action code.*/
 @SuppressWarnings({"rawtypes", "unchecked", "unused"})
@@ -1539,9 +1613,13 @@ class CUP$parser$actions {
 		int nleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left;
 		int nright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right;
 		String n = (String)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-3)).value;
-		 parser.verificarUso((String)n,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right); 
+		int teleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left;
+		int teright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right;
+		String te = (String)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-1)).value;
+		 int l=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left;
+           int c=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right;
+           String tn=parser.verificarUso((String)n,l,c);
+           parser.verificarAritmetico(tn,(String)te,"+=",l,c); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("sentencia",21, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1553,9 +1631,13 @@ class CUP$parser$actions {
 		int nleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left;
 		int nright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right;
 		String n = (String)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-3)).value;
-		 parser.verificarUso((String)n,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right); 
+		int teleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left;
+		int teright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right;
+		String te = (String)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-1)).value;
+		 int l=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left;
+           int c=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right;
+           String tn=parser.verificarUso((String)n,l,c);
+           parser.verificarAritmetico(tn,(String)te,"-=",l,c); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("sentencia",21, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1682,7 +1764,9 @@ class CUP$parser$actions {
 		int bleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
 		int bright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
 		String b = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
-		 RESULT=SymbolTable.tipoResultanteAritmetico((String)a,(String)b); 
+		 RESULT=parser.verificarAritmetico((String)a,(String)b,"+",
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1697,7 +1781,9 @@ class CUP$parser$actions {
 		int bleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
 		int bright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
 		String b = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
-		 RESULT=SymbolTable.tipoResultanteAritmetico((String)a,(String)b); 
+		 RESULT=parser.verificarAritmetico((String)a,(String)b,"-",
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1712,7 +1798,9 @@ class CUP$parser$actions {
 		int bleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
 		int bright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
 		String b = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
-		 RESULT=SymbolTable.tipoResultanteAritmetico((String)a,(String)b); 
+		 RESULT=parser.verificarAritmetico((String)a,(String)b,"*",
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1727,7 +1815,9 @@ class CUP$parser$actions {
 		int bleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
 		int bright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
 		String b = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
-		 RESULT=SymbolTable.tipoResultanteAritmetico((String)a,(String)b); 
+		 RESULT=parser.verificarAritmetico((String)a,(String)b,"/",
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1736,7 +1826,15 @@ class CUP$parser$actions {
           case 94: // expr ::= expr OP_IGUAL expr 
             {
               String RESULT =null;
-		 RESULT="bool"; 
+		int aleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left;
+		int aright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right;
+		String a = (String)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-2)).value;
+		int bleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int bright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		String b = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		 RESULT=parser.verificarComparacion((String)a,(String)b,"==",
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1745,7 +1843,15 @@ class CUP$parser$actions {
           case 95: // expr ::= expr OP_DIF expr 
             {
               String RESULT =null;
-		 RESULT="bool"; 
+		int aleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left;
+		int aright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right;
+		String a = (String)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-2)).value;
+		int bleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int bright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		String b = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		 RESULT=parser.verificarComparacion((String)a,(String)b,"!=",
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1754,7 +1860,15 @@ class CUP$parser$actions {
           case 96: // expr ::= expr OP_MENOR expr 
             {
               String RESULT =null;
-		 RESULT="bool"; 
+		int aleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left;
+		int aright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right;
+		String a = (String)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-2)).value;
+		int bleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int bright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		String b = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		 RESULT=parser.verificarComparacion((String)a,(String)b,"<",
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1763,7 +1877,15 @@ class CUP$parser$actions {
           case 97: // expr ::= expr OP_MAYOR expr 
             {
               String RESULT =null;
-		 RESULT="bool"; 
+		int aleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left;
+		int aright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right;
+		String a = (String)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-2)).value;
+		int bleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int bright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		String b = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		 RESULT=parser.verificarComparacion((String)a,(String)b,">",
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1772,7 +1894,15 @@ class CUP$parser$actions {
           case 98: // expr ::= expr OP_MENOR_IGUAL expr 
             {
               String RESULT =null;
-		 RESULT="bool"; 
+		int aleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left;
+		int aright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right;
+		String a = (String)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-2)).value;
+		int bleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int bright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		String b = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		 RESULT=parser.verificarComparacion((String)a,(String)b,"<=",
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1781,7 +1911,15 @@ class CUP$parser$actions {
           case 99: // expr ::= expr OP_MAYOR_IGUAL expr 
             {
               String RESULT =null;
-		 RESULT="bool"; 
+		int aleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left;
+		int aright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right;
+		String a = (String)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-2)).value;
+		int bleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int bright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		String b = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		 RESULT=parser.verificarComparacion((String)a,(String)b,">=",
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1790,7 +1928,15 @@ class CUP$parser$actions {
           case 100: // expr ::= expr OP_AND expr 
             {
               String RESULT =null;
-		 RESULT="bool"; 
+		int aleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left;
+		int aright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right;
+		String a = (String)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-2)).value;
+		int bleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int bright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		String b = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		 RESULT=parser.verificarLogico((String)a,(String)b,"&&",
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1799,7 +1945,15 @@ class CUP$parser$actions {
           case 101: // expr ::= expr OP_OR expr 
             {
               String RESULT =null;
-		 RESULT="bool"; 
+		int aleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left;
+		int aright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right;
+		String a = (String)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-2)).value;
+		int bleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int bright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		String b = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		 RESULT=parser.verificarLogico((String)a,(String)b,"||",
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1808,7 +1962,12 @@ class CUP$parser$actions {
           case 102: // expr ::= OP_NOT expr 
             {
               String RESULT =null;
-		 RESULT="bool"; 
+		int tleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int tright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		String t = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		 RESULT=parser.verificarNot((String)t,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -1820,7 +1979,9 @@ class CUP$parser$actions {
 		int tleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
 		int tright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
 		String t = (String)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
-		 RESULT=(String)t; 
+		 RESULT=parser.verificarNegacion((String)t,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("expr",23, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
