@@ -23,6 +23,8 @@ public class SymbolTable {
         public final int linea;
         public final int columna;
         public boolean inicializado;
+        public int aridad = 0;
+        public List<String> paramTipos = new ArrayList<>();
 
         public Simbolo(String nombre, String tipo, String ambito,
                        boolean esConstante, String valor, int linea, int columna) {

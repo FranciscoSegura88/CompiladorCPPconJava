@@ -205,6 +205,55 @@ parser code {:
         }
         return "bool";
     }
+
+    /** Tipo de retorno del método actual; se establece al entrar al cuerpo. */
+    public String tipoRetornoActual = "void";
+    /** Tipos de parámetros del método que se está declarando actualmente. */
+    public List<String> paramsActuales = new ArrayList<>();
+    /** Posición de la última condición de control (para reporte de errores). */
+    public int lineaCond = 0, colCond = 0;
+
+    /** Verifica que la condición de if/while sea de tipo bool. */
+    public void verificarCondicion(String tipo, int lin, int col) {
+        if (tipo == null || "unknown".equals(tipo)) return;
+        if (!"bool".equals(tipo))
+            errorSem(TipoErrorSem.CONDICION_NO_BOOLEANA,
+                "La condición debe ser de tipo 'bool', se encontró '" + tipo + "'",
+                lin, col, tipo);
+    }
+
+    /** Verifica que el tipo retornado coincida con el tipo declarado del método. */
+    public void verificarRetorno(String tipoExpr, int lin, int col) {
+        if ("void".equals(tipoRetornoActual)) {
+            if (tipoExpr != null && !"unknown".equals(tipoExpr))
+                errorSem(TipoErrorSem.RETORNO_INVALIDO,
+                    "Método de tipo 'void' no debe retornar un valor",
+                    lin, col, "return");
+            return;
+        }
+        if (tipoExpr == null || "unknown".equals(tipoExpr)) return;
+        if (!SymbolTable.sonCompatibles(tipoRetornoActual, tipoExpr))
+            errorSem(TipoErrorSem.RETORNO_INVALIDO,
+                "Tipo de retorno incompatible: se esperaba '" + tipoRetornoActual +
+                "' pero se encontró '" + tipoExpr + "'",
+                lin, col, "return");
+    }
+
+    /** Verifica llamada a método: existencia y número de argumentos. Retorna tipo de retorno. */
+    public String verificarLlamada(String nombre, int argc, int lin, int col) {
+        Simbolo m = tablaSimbolos.buscar("__m__" + nombre);
+        if (m == null) {
+            errorSem(TipoErrorSem.NO_DECLARADO,
+                "Método '" + nombre + "' no declarado", lin, col, nombre);
+            return "unknown";
+        }
+        if (m.aridad != argc)
+            errorSem(TipoErrorSem.ARGS_INCORRECTOS,
+                "Método '" + nombre + "' requiere " + m.aridad +
+                " argumento(s), se pasaron " + argc,
+                lin, col, nombre);
+        return m.tipo;
+    }
 :};
 
 /*═══════════════ TERMINALES ═══════════════*/
@@ -249,8 +298,9 @@ non terminal cuerpo_metodo, cuerpo_metodo_tail;
 non terminal lista_sentencias, sentencia;
 non terminal variable;
 non terminal String expr;
-non terminal args_llamada, lista_args;
+non terminal Integer args_llamada, lista_args;
 non terminal abre_metodo, abre_main;
+non terminal abre_if, abre_else, abre_while, abre_do;
 non terminal flujo_salida;
 
 /*═══════════════ PRECEDENCIA ═══════════════*/
@@ -350,19 +400,29 @@ constante
 
 /* ── Métodos ── */
 declaracion_metodo
-    ::= tipo:t ID:n abre_metodo PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_metodo LLAVE_DER
+    ::= tipo:t ID:n abre_metodo PAREN_IZQ parametros PAREN_DER
+        {: parser.tipoRetornoActual = (String)t; :}
+        LLAVE_IZQ cuerpo_metodo LLAVE_DER
         {: parser.tablaSimbolos.exitScope();
            if (parser.tablaSimbolos.buscarEnAmbitoActual("__m__"+(String)n) != null)
                parser.errorSem(TipoErrorSem.METODO_DUPLICADO,
                    "Método '" + n + "' ya declarado",
                    ((Symbol)CUP$parser$stack.peek()).left,
                    ((Symbol)CUP$parser$stack.peek()).right, (String)n);
-           else
+           else {
                parser.tablaSimbolos.insertar("__m__"+(String)n,(String)t,false,null,
                    ((Symbol)CUP$parser$stack.peek()).left,
-                   ((Symbol)CUP$parser$stack.peek()).right); :}
+                   ((Symbol)CUP$parser$stack.peek()).right);
+               Simbolo ms = parser.tablaSimbolos.buscarEnAmbitoActual("__m__"+(String)n);
+               if (ms != null) {
+                   ms.aridad = parser.paramsActuales.size();
+                   ms.paramTipos = new java.util.ArrayList<>(parser.paramsActuales);
+               }
+           } :}
 
-    |   tipo PR_MAIN abre_main PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_metodo LLAVE_DER
+    |   tipo:rt PR_MAIN abre_main PAREN_IZQ parametros PAREN_DER
+        {: parser.tipoRetornoActual = (String)rt; :}
+        LLAVE_IZQ cuerpo_metodo LLAVE_DER
         {: parser.tablaSimbolos.exitScope(); :}
 
     |   ID PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_metodo LLAVE_DER
@@ -381,7 +441,32 @@ abre_metodo
     ::= /* vacío */
         {: Symbol idSym = (Symbol) CUP$parser$stack.elementAt(CUP$parser$top);
            String nombre = (idSym.value != null) ? idSym.value.toString() : "metodo";
-           parser.tablaSimbolos.enterScope(nombre); :}
+           parser.tablaSimbolos.enterScope(nombre);
+           parser.paramsActuales = new java.util.ArrayList<>(); :}
+    ;
+
+abre_if
+    ::= /* vacío */
+        {: parser.lineaCond = ((Symbol)CUP$parser$stack.peek()).left;
+           parser.colCond   = ((Symbol)CUP$parser$stack.peek()).right;
+           parser.tablaSimbolos.enterScope("if"); :}
+    ;
+
+abre_else
+    ::= /* vacío */
+        {: parser.tablaSimbolos.enterScope("else"); :}
+    ;
+
+abre_while
+    ::= /* vacío */
+        {: parser.lineaCond = ((Symbol)CUP$parser$stack.peek()).left;
+           parser.colCond   = ((Symbol)CUP$parser$stack.peek()).right;
+           parser.tablaSimbolos.enterScope("while"); :}
+    ;
+
+abre_do
+    ::= /* vacío */
+        {: parser.tablaSimbolos.enterScope("do"); :}
     ;
 
 abre_main
@@ -423,7 +508,8 @@ parametro
     ::= tipo:t ID:n
         {: parser.declararParametro((String)n,(String)t,
                ((Symbol)CUP$parser$stack.peek()).left,
-               ((Symbol)CUP$parser$stack.peek()).right); :}
+               ((Symbol)CUP$parser$stack.peek()).right);
+           parser.paramsActuales.add((String)t); :}
     |   tipo error
         {: parser.report_error("Parámetro inválido (falta nombre o falta ',')",
                CUP$parser$stack.peek()); :}
@@ -488,12 +574,10 @@ sentencia
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right); :}
 
     /* llamada: metodo(args); */
-    |   ID:n PAREN_IZQ args_llamada PAREN_DER PUNTO_COMA
-        {: if (parser.tablaSimbolos.buscar("__m__"+(String)n)==null)
-               parser.errorSem(TipoErrorSem.NO_DECLARADO,
-                   "Método '"+n+"' no declarado",
-                   ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).left,
-                   ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).right,(String)n); :}
+    |   ID:n PAREN_IZQ args_llamada:argc PAREN_DER PUNTO_COMA
+        {: parser.verificarLlamada((String)n, (int)(Integer)argc,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).right); :}
 
     /* cout << expr << expr << endl; */
     |   PR_COUT flujo_salida PUNTO_COMA
@@ -505,16 +589,36 @@ sentencia
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right); :}
 
     /* return */
-    |   PR_RETURN expr PUNTO_COMA
+    |   PR_RETURN expr:te PUNTO_COMA
+        {: parser.verificarRetorno((String)te,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right); :}
     |   PR_RETURN PUNTO_COMA
 
-    /* if / if-else */
-    |   PR_IF PAREN_IZQ expr PAREN_DER LLAVE_IZQ lista_sentencias LLAVE_DER
-    |   PR_IF PAREN_IZQ expr PAREN_DER LLAVE_IZQ lista_sentencias LLAVE_DER
-        PR_ELSE LLAVE_IZQ lista_sentencias LLAVE_DER
+    /* if */
+    |   PR_IF PAREN_IZQ expr:c PAREN_DER abre_if LLAVE_IZQ lista_sentencias LLAVE_DER
+        {: parser.verificarCondicion((String)c, parser.lineaCond, parser.colCond);
+           parser.tablaSimbolos.exitScope(); :}
+
+    /* if-else */
+    |   PR_IF PAREN_IZQ expr:c PAREN_DER abre_if LLAVE_IZQ lista_sentencias LLAVE_DER
+        {: parser.tablaSimbolos.exitScope(); :}
+        PR_ELSE abre_else LLAVE_IZQ lista_sentencias LLAVE_DER
+        {: parser.verificarCondicion((String)c, parser.lineaCond, parser.colCond);
+           parser.tablaSimbolos.exitScope(); :}
 
     /* while */
-    |   PR_WHILE PAREN_IZQ expr PAREN_DER LLAVE_IZQ lista_sentencias LLAVE_DER
+    |   PR_WHILE PAREN_IZQ expr:c PAREN_DER abre_while LLAVE_IZQ lista_sentencias LLAVE_DER
+        {: parser.verificarCondicion((String)c, parser.lineaCond, parser.colCond);
+           parser.tablaSimbolos.exitScope(); :}
+
+    /* do-while */
+    |   PR_DO abre_do LLAVE_IZQ lista_sentencias LLAVE_DER
+        PR_WHILE PAREN_IZQ expr:c PAREN_DER PUNTO_COMA
+        {: parser.verificarCondicion((String)c,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right);
+           parser.tablaSimbolos.exitScope(); :}
     ;
 
 /* ── Expresiones ── */
@@ -577,14 +681,10 @@ expr
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
     |   PAREN_IZQ expr:t PAREN_DER {: RESULT=(String)t; :}
     /* llamada dentro de expr: f(args) */
-    |   ID:n PAREN_IZQ args_llamada PAREN_DER
-        {: Simbolo m=parser.tablaSimbolos.buscar("__m__"+(String)n);
-           if (m==null) {
-               parser.errorSem(TipoErrorSem.NO_DECLARADO,"Método '"+n+"' no declarado",
-                   ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left,
-                   ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right,(String)n);
-               RESULT="unknown";
-           } else RESULT=m.tipo; :}
+    |   ID:n PAREN_IZQ args_llamada:argc PAREN_DER
+        {: RESULT = parser.verificarLlamada((String)n, (int)(Integer)argc,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left,
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right); :}
     /* literales e IDs */
     |   LIT_ENTERO              {: RESULT="int";    :}
     |   LIT_DECIMAL             {: RESULT="float";  :}
@@ -598,8 +698,14 @@ expr
     ;
 
 /* ── Args de llamada ── */
-args_llamada ::= lista_args | /* vacío */ ;
-lista_args   ::= lista_args COMA expr | expr ;
+args_llamada
+    ::= lista_args:n {: RESULT = (Integer)n; :}
+    |   /* vacío */  {: RESULT = 0; :}
+    ;
+lista_args
+    ::= lista_args:n COMA expr {: RESULT = ((Integer)n) + 1; :}
+    |   expr                   {: RESULT = 1; :}
+    ;
 
 /* ── Flujo de salida (cout << a << b << endl) ── */
 flujo_salida

@@ -16,7 +16,10 @@ public class SemanticError {
         TIPO_INCOMPATIBLE,
         CONSTANTE_REASIGNADA,
         METODO_DUPLICADO,
-        USO_ANTES_DE_DECLARAR
+        USO_ANTES_DE_DECLARAR,
+        CONDICION_NO_BOOLEANA,
+        RETORNO_INVALIDO,
+        ARGS_INCORRECTOS
     }
 
     private final TipoErrorSem tipo;
@@ -49,6 +52,9 @@ public class SemanticError {
             case CONSTANTE_REASIGNADA  -> "Semántico";
             case METODO_DUPLICADO      -> "Semántico";
             case USO_ANTES_DE_DECLARAR -> "Semántico";
+            case CONDICION_NO_BOOLEANA -> "Semántico";
+            case RETORNO_INVALIDO      -> "Semántico";
+            case ARGS_INCORRECTOS      -> "Semántico";
         };
     }
 
