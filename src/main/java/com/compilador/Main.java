@@ -10,6 +10,7 @@ import com.compilador.semantico.SemanticError;
 
 import java.io.FileReader;
 import java.util.List;
+import java.util.ArrayList;
 
 public class Main {
 
@@ -70,6 +71,25 @@ public class Main {
         }
 
         System.out.println("═".repeat(39));
+
+        // ── Código de tres direcciones ───────────────────────────────
+        List<String> tac = p.tac.getInstrucciones();
+        System.out.println();
+        System.out.println("═".repeat(10) + " CÓDIGO DE TRES DIRECCIONES " + "═".repeat(10));
+        if (tac.isEmpty()) {
+            System.out.println("  (sin instrucciones)");
+        } else {
+            for (int i = 0; i < tac.size(); i++) {
+                String inst = tac.get(i);
+                boolean esLabel = inst.endsWith(":");
+                if (esLabel) {
+                    System.out.printf("%n  %s%n", inst);
+                } else {
+                    System.out.printf("    %s%n", inst);
+                }
+            }
+        }
+        System.out.println("═".repeat(48));
 
         // ── Última instrucción de impresión ──────────────────────────
         System.out.println("Compilador C++ — Segura Valencia Francisco");

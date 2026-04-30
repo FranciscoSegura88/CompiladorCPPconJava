@@ -14,11 +14,15 @@ import com.compilador.semantico.SymbolTable;
 import com.compilador.semantico.SymbolTable.Simbolo;
 import com.compilador.semantico.SemanticError;
 import com.compilador.semantico.SemanticError.TipoErrorSem;
+import com.compilador.tac.TACGenerator;
+import com.compilador.tac.ExprResult;
 
 parser code {:
     private ScannerLexicoCpp scanner;
     public  SymbolTable         tablaSimbolos = new SymbolTable();
     public  List<SemanticError> erroresSem    = new ArrayList<>();
+    public  TACGenerator        tac           = new TACGenerator();
+    public  java.util.Deque<String[]> labelStack = new java.util.ArrayDeque<>();
 
     public parser(ScannerLexicoCpp scanner) {
         this(scanner, new DefaultSymbolFactory());
@@ -297,10 +301,10 @@ non terminal parametros, lista_parametros, parametro;
 non terminal cuerpo_metodo, cuerpo_metodo_tail;
 non terminal lista_sentencias, sentencia;
 non terminal variable;
-non terminal String expr;
+non terminal ExprResult expr;
 non terminal Integer args_llamada, lista_args;
 non terminal abre_metodo, abre_main;
-non terminal abre_if, abre_else, abre_while, abre_do;
+non terminal abre_if, abre_else, abre_while, abre_do, marca_while;
 non terminal flujo_salida;
 
 /*═══════════════ PRECEDENCIA ═══════════════*/
@@ -403,7 +407,8 @@ declaracion_metodo
     ::= tipo:t ID:n abre_metodo PAREN_IZQ parametros PAREN_DER
         {: parser.tipoRetornoActual = (String)t; :}
         LLAVE_IZQ cuerpo_metodo LLAVE_DER
-        {: parser.tablaSimbolos.exitScope();
+        {: parser.tac.emitir("end " + (String)n);
+           parser.tablaSimbolos.exitScope();
            if (parser.tablaSimbolos.buscarEnAmbitoActual("__m__"+(String)n) != null)
                parser.errorSem(TipoErrorSem.METODO_DUPLICADO,
                    "Método '" + n + "' ya declarado",
@@ -423,7 +428,8 @@ declaracion_metodo
     |   tipo:rt PR_MAIN abre_main PAREN_IZQ parametros PAREN_DER
         {: parser.tipoRetornoActual = (String)rt; :}
         LLAVE_IZQ cuerpo_metodo LLAVE_DER
-        {: parser.tablaSimbolos.exitScope(); :}
+        {: parser.tac.emitir("end main");
+           parser.tablaSimbolos.exitScope(); :}
 
     |   ID PAREN_IZQ parametros PAREN_DER LLAVE_IZQ cuerpo_metodo LLAVE_DER
         {: parser.report_error("Tipo de retorno inválido", CUP$parser$stack.peek()); :}
@@ -441,6 +447,7 @@ abre_metodo
     ::= /* vacío */
         {: Symbol idSym = (Symbol) CUP$parser$stack.elementAt(CUP$parser$top);
            String nombre = (idSym.value != null) ? idSym.value.toString() : "metodo";
+           parser.tac.emitir("begin " + nombre);
            parser.tablaSimbolos.enterScope(nombre);
            parser.paramsActuales = new java.util.ArrayList<>(); :}
     ;
@@ -449,6 +456,11 @@ abre_if
     ::= /* vacío */
         {: parser.lineaCond = ((Symbol)CUP$parser$stack.peek()).left;
            parser.colCond   = ((Symbol)CUP$parser$stack.peek()).right;
+           ExprResult _cif = (ExprResult)((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).value;
+           String Lfalse = parser.tac.nuevoLabel();
+           String Lend   = parser.tac.nuevoLabel();
+           parser.tac.emitir("ifFalse " + _cif.lugar + " goto " + Lfalse);
+           parser.labelStack.push(new String[]{Lfalse, Lend});
            parser.tablaSimbolos.enterScope("if"); :}
     ;
 
@@ -461,17 +473,32 @@ abre_while
     ::= /* vacío */
         {: parser.lineaCond = ((Symbol)CUP$parser$stack.peek()).left;
            parser.colCond   = ((Symbol)CUP$parser$stack.peek()).right;
+           ExprResult _cw = (ExprResult)((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).value;
+           String[] _wl = parser.labelStack.peek();
+           parser.tac.emitir("ifFalse " + _cw.lugar + " goto " + _wl[1]);
            parser.tablaSimbolos.enterScope("while"); :}
     ;
 
 abre_do
     ::= /* vacío */
-        {: parser.tablaSimbolos.enterScope("do"); :}
+        {: String Ldo = parser.tac.nuevoLabel();
+           parser.tac.emitir(Ldo + ":");
+           parser.labelStack.push(new String[]{Ldo});
+           parser.tablaSimbolos.enterScope("do"); :}
     ;
 
 abre_main
     ::= /* vacío */
-        {: parser.tablaSimbolos.enterScope("main"); :}
+        {: parser.tac.emitir("begin main");
+           parser.tablaSimbolos.enterScope("main"); :}
+    ;
+
+marca_while
+    ::= /* vacío */
+        {: String Lw = parser.tac.nuevoLabel();
+           String Lwe = parser.tac.nuevoLabel();
+           parser.tac.emitir(Lw + ":");
+           parser.labelStack.push(new String[]{Lw, Lwe}); :}
     ;
 
 /* ── Tipos ── */
@@ -547,37 +574,47 @@ sentencia
         {: int l=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left;
            int c=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right;
            parser.verificarDeclarado((String)n,l,c);
-           parser.verificarAsignacion((String)n,(String)t,l,c); :}
+           parser.verificarAsignacion((String)n,t.tipo,l,c);
+           parser.tac.emitir((String)n+" = "+t.lugar); :}
 
     /* x += expr; */
     |   ID:n OP_SUMA_ASIG expr:te PUNTO_COMA
         {: int l=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left;
            int c=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right;
            String tn=parser.verificarUso((String)n,l,c);
-           parser.verificarAritmetico(tn,(String)te,"+=",l,c); :}
+           parser.verificarAritmetico(tn,te.tipo,"+=",l,c);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+(String)n+" + "+te.lugar);
+           parser.tac.emitir((String)n+" = "+tmp); :}
 
     /* x -= expr; */
     |   ID:n OP_RESTA_ASIG expr:te PUNTO_COMA
         {: int l=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left;
            int c=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right;
            String tn=parser.verificarUso((String)n,l,c);
-           parser.verificarAritmetico(tn,(String)te,"-=",l,c); :}
+           parser.verificarAritmetico(tn,te.tipo,"-=",l,c);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+(String)n+" - "+te.lugar);
+           parser.tac.emitir((String)n+" = "+tmp); :}
 
     /* x++; x--; */
     |   ID:n OP_INC PUNTO_COMA
         {: parser.verificarUso((String)n,
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right);
+           parser.tac.emitir((String)n+" = "+(String)n+" + 1"); :}
     |   ID:n OP_DEC PUNTO_COMA
         {: parser.verificarUso((String)n,
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right);
+           parser.tac.emitir((String)n+" = "+(String)n+" - 1"); :}
 
     /* llamada: metodo(args); */
     |   ID:n PAREN_IZQ args_llamada:argc PAREN_DER PUNTO_COMA
         {: parser.verificarLlamada((String)n, (int)(Integer)argc,
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).right);
+           parser.tac.emitir("call "+n+", "+argc); :}
 
     /* cout << expr << expr << endl; */
     |   PR_COUT flujo_salida PUNTO_COMA
@@ -586,36 +623,51 @@ sentencia
     |   PR_CIN OP_FLUJO_ENT ID:n PUNTO_COMA
         {: parser.verificarUso((String)n,
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right);
+           parser.tac.emitir("read "+n); :}
 
     /* return */
     |   PR_RETURN expr:te PUNTO_COMA
-        {: parser.verificarRetorno((String)te,
+        {: parser.verificarRetorno(te.tipo,
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right);
+           parser.tac.emitir("return "+te.lugar); :}
     |   PR_RETURN PUNTO_COMA
+        {: parser.tac.emitir("return"); :}
 
     /* if */
     |   PR_IF PAREN_IZQ expr:c PAREN_DER abre_if LLAVE_IZQ lista_sentencias LLAVE_DER
-        {: parser.verificarCondicion((String)c, parser.lineaCond, parser.colCond);
+        {: String[] _l = parser.labelStack.pop();
+           parser.tac.emitir(_l[0] + ":");
+           parser.verificarCondicion(c.tipo, parser.lineaCond, parser.colCond);
            parser.tablaSimbolos.exitScope(); :}
 
     /* if-else */
     |   PR_IF PAREN_IZQ expr:c PAREN_DER abre_if LLAVE_IZQ lista_sentencias LLAVE_DER
-        {: parser.tablaSimbolos.exitScope(); :}
+        {: String[] _l = parser.labelStack.peek();
+           parser.tac.emitir("goto " + _l[1]);
+           parser.tac.emitir(_l[0] + ":");
+           parser.tablaSimbolos.exitScope(); :}
         PR_ELSE abre_else LLAVE_IZQ lista_sentencias LLAVE_DER
-        {: parser.verificarCondicion((String)c, parser.lineaCond, parser.colCond);
+        {: String[] _l = parser.labelStack.pop();
+           parser.tac.emitir(_l[1] + ":");
+           parser.verificarCondicion(c.tipo, parser.lineaCond, parser.colCond);
            parser.tablaSimbolos.exitScope(); :}
 
     /* while */
-    |   PR_WHILE PAREN_IZQ expr:c PAREN_DER abre_while LLAVE_IZQ lista_sentencias LLAVE_DER
-        {: parser.verificarCondicion((String)c, parser.lineaCond, parser.colCond);
+    |   PR_WHILE marca_while PAREN_IZQ expr:c PAREN_DER abre_while LLAVE_IZQ lista_sentencias LLAVE_DER
+        {: String[] _l = parser.labelStack.pop();
+           parser.tac.emitir("goto " + _l[0]);
+           parser.tac.emitir(_l[1] + ":");
+           parser.verificarCondicion(c.tipo, parser.lineaCond, parser.colCond);
            parser.tablaSimbolos.exitScope(); :}
 
     /* do-while */
     |   PR_DO abre_do LLAVE_IZQ lista_sentencias LLAVE_DER
         PR_WHILE PAREN_IZQ expr:c PAREN_DER PUNTO_COMA
-        {: parser.verificarCondicion((String)c,
+        {: String[] _l = parser.labelStack.pop();
+           parser.tac.emitir("if " + c.lugar + " goto " + _l[0]);
+           parser.verificarCondicion(c.tipo,
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right);
            parser.tablaSimbolos.exitScope(); :}
@@ -624,77 +676,139 @@ sentencia
 /* ── Expresiones ── */
 expr
     ::= expr:a OP_SUMA  expr:b
-        {: RESULT=parser.verificarAritmetico((String)a,(String)b,"+",
+        {: String tipo=parser.verificarAritmetico(a.tipo,b.tipo,"+",
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+a.lugar+" + "+b.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   expr:a OP_RESTA expr:b
-        {: RESULT=parser.verificarAritmetico((String)a,(String)b,"-",
+        {: String tipo=parser.verificarAritmetico(a.tipo,b.tipo,"-",
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+a.lugar+" - "+b.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   expr:a OP_MULT  expr:b
-        {: RESULT=parser.verificarAritmetico((String)a,(String)b,"*",
+        {: String tipo=parser.verificarAritmetico(a.tipo,b.tipo,"*",
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+a.lugar+" * "+b.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   expr:a OP_DIV   expr:b
-        {: RESULT=parser.verificarAritmetico((String)a,(String)b,"/",
+        {: String tipo=parser.verificarAritmetico(a.tipo,b.tipo,"/",
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           parser.tac.emitir("if "+b.lugar+" == 0 then error \"Division by zero\"");
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+a.lugar+" / "+b.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   expr:a OP_IGUAL       expr:b
-        {: RESULT=parser.verificarComparacion((String)a,(String)b,"==",
+        {: String tipo=parser.verificarComparacion(a.tipo,b.tipo,"==",
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+a.lugar+" == "+b.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   expr:a OP_DIF         expr:b
-        {: RESULT=parser.verificarComparacion((String)a,(String)b,"!=",
+        {: String tipo=parser.verificarComparacion(a.tipo,b.tipo,"!=",
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+a.lugar+" != "+b.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   expr:a OP_MENOR       expr:b
-        {: RESULT=parser.verificarComparacion((String)a,(String)b,"<",
+        {: String tipo=parser.verificarComparacion(a.tipo,b.tipo,"<",
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+a.lugar+" < "+b.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   expr:a OP_MAYOR       expr:b
-        {: RESULT=parser.verificarComparacion((String)a,(String)b,">",
+        {: String tipo=parser.verificarComparacion(a.tipo,b.tipo,">",
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+a.lugar+" > "+b.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   expr:a OP_MENOR_IGUAL expr:b
-        {: RESULT=parser.verificarComparacion((String)a,(String)b,"<=",
+        {: String tipo=parser.verificarComparacion(a.tipo,b.tipo,"<=",
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+a.lugar+" <= "+b.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   expr:a OP_MAYOR_IGUAL expr:b
-        {: RESULT=parser.verificarComparacion((String)a,(String)b,">=",
+        {: String tipo=parser.verificarComparacion(a.tipo,b.tipo,">=",
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+a.lugar+" >= "+b.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   expr:a OP_AND expr:b
-        {: RESULT=parser.verificarLogico((String)a,(String)b,"&&",
+        {: String tipo=parser.verificarLogico(a.tipo,b.tipo,"&&",
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+a.lugar+" && "+b.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   expr:a OP_OR  expr:b
-        {: RESULT=parser.verificarLogico((String)a,(String)b,"||",
+        {: String tipo=parser.verificarLogico(a.tipo,b.tipo,"||",
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+a.lugar+" || "+b.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   OP_NOT expr:t
-        {: RESULT=parser.verificarNot((String)t,
+        {: String tipo=parser.verificarNot(t.tipo,
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = !"+t.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
     |   OP_RESTA expr:t
-        {: RESULT=parser.verificarNegacion((String)t,
+        {: String tipo=parser.verificarNegacion(t.tipo,
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right); :}
-    |   PAREN_IZQ expr:t PAREN_DER {: RESULT=(String)t; :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = -"+t.lugar);
+           RESULT=new ExprResult(tipo,tmp); :}
+    |   PAREN_IZQ expr:t PAREN_DER {: RESULT=t; :}
     /* llamada dentro de expr: f(args) */
     |   ID:n PAREN_IZQ args_llamada:argc PAREN_DER
-        {: RESULT = parser.verificarLlamada((String)n, (int)(Integer)argc,
+        {: String retTipo=parser.verificarLlamada((String)n,(int)(Integer)argc,
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left,
-               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right); :}
+               ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right);
+           String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = call "+n+", "+argc);
+           RESULT=new ExprResult(retTipo,tmp); :}
     /* literales e IDs */
-    |   LIT_ENTERO              {: RESULT="int";    :}
-    |   LIT_DECIMAL             {: RESULT="float";  :}
-    |   LIT_STRING              {: RESULT="string"; :}
-    |   LIT_CHAR                {: RESULT="char";   :}
-    |   LIT_BOOL                {: RESULT="bool";   :}
+    |   LIT_ENTERO:v
+        {: String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+v);
+           RESULT=new ExprResult("int",tmp); :}
+    |   LIT_DECIMAL:v
+        {: String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+v);
+           RESULT=new ExprResult("float",tmp); :}
+    |   LIT_STRING:v
+        {: String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+v);
+           RESULT=new ExprResult("string",tmp); :}
+    |   LIT_CHAR:v
+        {: String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+v);
+           RESULT=new ExprResult("char",tmp); :}
+    |   LIT_BOOL:v
+        {: String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+v);
+           RESULT=new ExprResult("bool",tmp); :}
     |   ID:n
-        {: RESULT=parser.verificarUso((String)n,
+        {: String tipo=parser.verificarUso((String)n,
                ((Symbol)CUP$parser$stack.peek()).left,
-               ((Symbol)CUP$parser$stack.peek()).right); :}
+               ((Symbol)CUP$parser$stack.peek()).right);
+           RESULT=new ExprResult(tipo,(String)n); :}
     ;
 
 /* ── Args de llamada ── */
@@ -727,15 +841,15 @@ variable
     |   tipo:t ID:n OP_ASIG expr:te PUNTO_COMA
         {: int l=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).left;
            int c=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-4)).right;
-           boolean ok = parser.declararSimboloConRetorno((String)n,(String)t,false,(String)te,l,c);
-           if (ok && te!=null && !te.equals("unknown") &&
-               !SymbolTable.sonCompatibles((String)t,(String)te)) {
+           boolean ok = parser.declararSimboloConRetorno((String)n,(String)t,false,te.tipo,l,c);
+           if (ok && te.tipo!=null && !te.tipo.equals("unknown") &&
+               !SymbolTable.sonCompatibles((String)t,te.tipo)) {
                parser.errorSem(TipoErrorSem.TIPO_INCOMPATIBLE,
-                   "Tipo incompatible: no se puede asignar '"+te+
+                   "Tipo incompatible: no se puede asignar '"+te.tipo+
                    "' a '"+n+"' de tipo '"+t+"'",l,c,(String)n);
-               // forzar inserción para que no aparezca como "no declarado" después
                parser.tablaSimbolos.insertarForzado((String)n,(String)t,false,null,l,c);
-           } :}
+           }
+           parser.tac.emitir((String)n+" = "+te.lugar); :}
 
     /* error: falta ; */
     |   tipo:t ID:n OP_ASIG expr error
