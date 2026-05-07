@@ -654,7 +654,8 @@ parametro
         {: parser.declararParametro((String)n,(String)t,
                ((Symbol)CUP$parser$stack.peek()).left,
                ((Symbol)CUP$parser$stack.peek()).right);
-           parser.paramsActuales.add((String)t); :}
+           parser.paramsActuales.add((String)t);
+           parser.tac.emitir("getparam " + (String)n); :}
     |   tipo error
         {: parser.report_error("Parámetro inválido (falta nombre o falta ',')",
                CUP$parser$stack.peek()); :}
@@ -969,16 +970,24 @@ args_llamada
     |   /* vacío */  {: RESULT = 0; :}
     ;
 lista_args
-    ::= lista_args:n COMA expr {: RESULT = ((Integer)n) + 1; :}
-    |   expr                   {: RESULT = 1; :}
+    ::= lista_args:n COMA expr:e {:
+           parser.tac.emitir("param " + e.lugar);
+           RESULT = ((Integer)n) + 1; :}
+    |   expr:e {:
+           parser.tac.emitir("param " + e.lugar);
+           RESULT = 1; :}
     ;
 
 /* ── Flujo de salida (cout << a << b << endl) ── */
 flujo_salida
-    ::= flujo_salida OP_FLUJO_SAL expr
+    ::= flujo_salida OP_FLUJO_SAL expr:e
+            {: parser.tac.emitir("print " + e.lugar); :}
     |   flujo_salida OP_FLUJO_SAL PR_ENDL
-    |   OP_FLUJO_SAL expr
+            {: parser.tac.emitir("printnl"); :}
+    |   OP_FLUJO_SAL expr:e
+            {: parser.tac.emitir("print " + e.lugar); :}
     |   OP_FLUJO_SAL PR_ENDL
+            {: parser.tac.emitir("printnl"); :}
     ;
 
 /* ── Variables (solo un ID por producción) ── */

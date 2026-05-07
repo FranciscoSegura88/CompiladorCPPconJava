@@ -2115,7 +2115,8 @@ class CUP$parser$actions {
 		 parser.declararParametro((String)n,(String)t,
                ((Symbol)CUP$parser$stack.peek()).left,
                ((Symbol)CUP$parser$stack.peek()).right);
-           parser.paramsActuales.add((String)t); 
+           parser.paramsActuales.add((String)t);
+           parser.tac.emitir("getparam " + (String)n); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("parametro",17, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -2961,7 +2962,12 @@ class CUP$parser$actions {
 		int nleft = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left;
 		int nright = ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right;
 		Integer n = (Integer)((java_cup.runtime.Symbol) CUP$parser$stack.elementAt(CUP$parser$top-2)).value;
-		 RESULT = ((Integer)n) + 1; 
+		int eleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int eright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		ExprResult e = (ExprResult)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		
+           parser.tac.emitir("param " + e.lugar);
+           RESULT = ((Integer)n) + 1; 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("lista_args",25, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -2970,7 +2976,12 @@ class CUP$parser$actions {
           case 151: // lista_args ::= expr 
             {
               Integer RESULT =null;
-		 RESULT = 1; 
+		int eleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int eright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		ExprResult e = (ExprResult)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		
+           parser.tac.emitir("param " + e.lugar);
+           RESULT = 1; 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("lista_args",25, ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -2979,7 +2990,10 @@ class CUP$parser$actions {
           case 152: // flujo_salida ::= flujo_salida OP_FLUJO_SAL expr 
             {
               Object RESULT =null;
-
+		int eleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int eright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		ExprResult e = (ExprResult)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		 parser.tac.emitir("print " + e.lugar); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("flujo_salida",46, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -2988,7 +3002,7 @@ class CUP$parser$actions {
           case 153: // flujo_salida ::= flujo_salida OP_FLUJO_SAL PR_ENDL 
             {
               Object RESULT =null;
-
+		 parser.tac.emitir("printnl"); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("flujo_salida",46, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -2997,7 +3011,10 @@ class CUP$parser$actions {
           case 154: // flujo_salida ::= OP_FLUJO_SAL expr 
             {
               Object RESULT =null;
-
+		int eleft = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).left;
+		int eright = ((java_cup.runtime.Symbol)CUP$parser$stack.peek()).right;
+		ExprResult e = (ExprResult)((java_cup.runtime.Symbol) CUP$parser$stack.peek()).value;
+		 parser.tac.emitir("print " + e.lugar); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("flujo_salida",46, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
@@ -3006,7 +3023,7 @@ class CUP$parser$actions {
           case 155: // flujo_salida ::= OP_FLUJO_SAL PR_ENDL 
             {
               Object RESULT =null;
-
+		 parser.tac.emitir("printnl"); 
               CUP$parser$result = parser.getSymbolFactory().newSymbol("flujo_salida",46, ((java_cup.runtime.Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)), ((java_cup.runtime.Symbol)CUP$parser$stack.peek()), RESULT);
             }
           return CUP$parser$result;
