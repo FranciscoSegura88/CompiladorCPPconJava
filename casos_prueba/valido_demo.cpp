@@ -5,7 +5,7 @@
 #include <iostream>
 using namespace std;
 
-/* Demostración de operaciones con salida visible */
+/* Segura Valencia Francisco — Clase Calculadora */
 class Calculadora {
 public:
     int sumar(int a, int b) {
@@ -29,39 +29,55 @@ public:
     }
 };
 
+/* Segura Valencia Francisco — Clase Programa (punto de entrada) */
 class Programa {
 public:
     int main() {
+        cout << "Segura Valencia Francisco";
+
         Calculadora calc = new Calculadora();
 
         int a = 10;
         int b = 3;
 
-        int resultado = calc.sumar(a, b);
-        cout << resultado;
+        cout << endl;
+        cout << "=== Operaciones Aritmeticas ===";
         cout << endl;
 
-        resultado = calc.restar(a, b);
-        cout << resultado;
+        int suma = calc.sumar(a, b);
+        cout << "Suma (10 + 3): ";
+        cout << suma;
         cout << endl;
 
-        resultado = calc.multiplicar(a, b);
-        cout << resultado;
+        int resta = calc.restar(a, b);
+        cout << "Resta (10 - 3): ";
+        cout << resta;
         cout << endl;
 
-        resultado = calc.dividir(a, b);
-        cout << resultado;
+        int producto = calc.multiplicar(a, b);
+        cout << "Multiplicacion (10 * 3): ";
+        cout << producto;
         cout << endl;
 
-        /* While demo: suma 0+1+2+3+4 = 10 */
+        int division = calc.dividir(a, b);
+        cout << "Division (10 / 3): ";
+        cout << division;
+        cout << endl;
+
+        cout << "=== Bucle While (suma acumulativa) ===";
+        cout << endl;
+
         int i = 0;
         int total = 0;
         while (i < 5) {
             total = total + i;
             i = i + 1;
         }
+        cout << "Total (0+1+2+3+4): ";
         cout << total;
         cout << endl;
+
+        cout << "Segura Valencia Francisco";
 
         return 0;
     }
