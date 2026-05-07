@@ -77,7 +77,13 @@ UNCLOSED_STRING = \"[^\"\n]*
 "if"        { return symbol(sym.PR_IF);     }
 "else"      { return symbol(sym.PR_ELSE);   }
 "while"     { return symbol(sym.PR_WHILE);  }
-"do"        { return symbol(sym.PR_DO);     }
+"do"        { return symbol(sym.PR_DO);      }
+"for"       { return symbol(sym.PR_FOR);     }
+"switch"    { return symbol(sym.PR_SWITCH);  }
+"case"      { return symbol(sym.PR_CASE);    }
+"break"     { return symbol(sym.PR_BREAK);   }
+"default"   { return symbol(sym.PR_DEFAULT); }
+"new"       { return symbol(sym.PR_NEW);     }
 "return"    { return symbol(sym.PR_RETURN); }
 "double"    { return symbol(sym.PR_DOUBLE); }
 
@@ -123,8 +129,9 @@ UNCLOSED_STRING = \"[^\"\n]*
 "{"     { return symbol(sym.LLAVE_IZQ); }
 "}"     { return symbol(sym.LLAVE_DER); }
 "#"     { return symbol(sym.HASH);      }
-"::"    { return symbol(sym.DOBLE_DOS); }
+"::"    { return symbol(sym.DOBLE_DOS);  }
 ":"     { return symbol(sym.DOS_PUNTOS); }
+"."     { return symbol(sym.PUNTO);      }
 
 /* ══ Trampas de errores ══ */
 {INVALID_ID} {

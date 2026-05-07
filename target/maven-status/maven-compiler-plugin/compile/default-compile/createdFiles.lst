@@ -1,11 +1,13 @@
 com/compilador/semantico/SemanticError$TipoErrorSem.class
-com/compilador/parser/sym.class
 com/compilador/Main.class
+com/compilador/parser/sym.class
 com/compilador/semantico/SemanticError.class
+com/compilador/tac/TACGenerator.class
 com/compilador/CompilerError.class
 com/compilador/parser/parser.class
 com/compilador/CompilerError$TipoError.class
 com/compilador/semantico/SymbolTable$Simbolo.class
+com/compilador/tac/ExprResult.class
 com/compilador/parser/parser$CUP$parser$actions.class
 com/compilador/semantico/SymbolTable.class
 com/compilador/lexico/ScannerLexicoCpp.class

@@ -8,69 +8,76 @@ package com.compilador.parser;
 /** CUP generated interface containing symbol constants. */
 public interface sym {
   /* terminals */
-  public static final int LIT_DECIMAL = 59;
+  public static final int LIT_DECIMAL = 66;
   public static final int PR_INT = 2;
-  public static final int OP_MAYOR = 36;
-  public static final int PR_STD = 16;
-  public static final int OP_RESTA_ASIG = 47;
-  public static final int DOBLE_DOS = 55;
+  public static final int OP_MAYOR = 43;
+  public static final int PR_FOR = 15;
+  public static final int PR_STD = 23;
+  public static final int PR_BREAK = 18;
+  public static final int OP_RESTA_ASIG = 54;
+  public static final int DOBLE_DOS = 62;
   public static final int PR_VOID = 8;
-  public static final int PR_PRIVATE = 26;
-  public static final int OP_FLUJO_SAL = 42;
-  public static final int DOS_PUNTOS = 56;
-  public static final int HASH = 50;
-  public static final int OP_NOT = 41;
-  public static final int OP_AND = 39;
+  public static final int PR_PRIVATE = 33;
+  public static final int OP_FLUJO_SAL = 49;
+  public static final int DOS_PUNTOS = 63;
+  public static final int HASH = 57;
+  public static final int OP_NOT = 48;
+  public static final int OP_AND = 46;
   public static final int PR_IF = 10;
   public static final int PR_RETURN = 14;
   public static final int PR_ELSE = 11;
-  public static final int PR_COUT = 17;
-  public static final int OP_INC = 44;
+  public static final int PR_COUT = 24;
+  public static final int OP_INC = 51;
   public static final int PR_WHILE = 12;
-  public static final int OP_DIV = 31;
-  public static final int LLAVE_IZQ = 53;
+  public static final int OP_DIV = 38;
+  public static final int LLAVE_IZQ = 60;
   public static final int PR_FLOAT = 3;
-  public static final int PR_PROTECTED = 27;
-  public static final int PAREN_DER = 52;
-  public static final int LIB_IOSTREAM = 22;
-  public static final int PR_CIN = 18;
-  public static final int OP_DIF = 34;
-  public static final int ID = 57;
-  public static final int PUNTO_COMA = 48;
-  public static final int OP_SUMA_ASIG = 46;
-  public static final int OP_FLUJO_ENT = 43;
+  public static final int PR_PROTECTED = 34;
+  public static final int PR_SWITCH = 16;
+  public static final int PAREN_DER = 59;
+  public static final int PR_NEW = 20;
+  public static final int LIB_IOSTREAM = 29;
+  public static final int OP_DIF = 41;
+  public static final int PR_CIN = 25;
+  public static final int ID = 64;
+  public static final int PUNTO_COMA = 55;
+  public static final int OP_SUMA_ASIG = 53;
+  public static final int OP_FLUJO_ENT = 50;
   public static final int EOF = 0;
-  public static final int PR_PUBLIC = 25;
+  public static final int PR_PUBLIC = 32;
   public static final int error = 1;
-  public static final int PR_INCLUDE = 15;
-  public static final int COMA = 49;
-  public static final int LIT_STRING = 60;
-  public static final int OP_MULT = 30;
-  public static final int OP_OR = 40;
-  public static final int LIT_CHAR = 61;
-  public static final int OP_RESTA = 29;
+  public static final int PR_INCLUDE = 22;
+  public static final int COMA = 56;
+  public static final int LIT_STRING = 67;
+  public static final int OP_MULT = 37;
+  public static final int OP_OR = 47;
+  public static final int LIT_CHAR = 68;
+  public static final int OP_RESTA = 36;
   public static final int PR_STRING = 6;
-  public static final int PR_CONST = 24;
+  public static final int PR_CONST = 31;
   public static final int PR_CHAR = 5;
-  public static final int OP_MAYOR_IGUAL = 38;
-  public static final int PR_USING = 19;
-  public static final int LLAVE_DER = 54;
-  public static final int OP_IGUAL = 33;
+  public static final int OP_MAYOR_IGUAL = 45;
+  public static final int PR_USING = 26;
+  public static final int PR_CASE = 17;
+  public static final int LLAVE_DER = 61;
+  public static final int OP_IGUAL = 40;
+  public static final int PUNTO = 21;
+  public static final int PR_DEFAULT = 19;
   public static final int PR_DO = 13;
-  public static final int PR_NAMESPACE = 20;
-  public static final int OP_DEC = 45;
-  public static final int OP_MENOR_IGUAL = 37;
-  public static final int PR_ENDL = 21;
-  public static final int LIT_ENTERO = 58;
-  public static final int LIT_BOOL = 62;
-  public static final int PR_CLASS = 23;
+  public static final int PR_NAMESPACE = 27;
+  public static final int OP_DEC = 52;
+  public static final int OP_MENOR_IGUAL = 44;
+  public static final int PR_ENDL = 28;
+  public static final int LIT_ENTERO = 65;
+  public static final int LIT_BOOL = 69;
+  public static final int PR_CLASS = 30;
+  public static final int OP_SUMA = 35;
   public static final int PR_BOOL = 4;
-  public static final int OP_SUMA = 28;
   public static final int PR_DOUBLE = 7;
-  public static final int PAREN_IZQ = 51;
+  public static final int PAREN_IZQ = 58;
   public static final int PR_MAIN = 9;
-  public static final int OP_ASIG = 32;
-  public static final int OP_MENOR = 35;
+  public static final int OP_ASIG = 39;
+  public static final int OP_MENOR = 42;
   public static final String[] terminalNames = new String[] {
   "EOF",
   "error",
@@ -87,6 +94,13 @@ public interface sym {
   "PR_WHILE",
   "PR_DO",
   "PR_RETURN",
+  "PR_FOR",
+  "PR_SWITCH",
+  "PR_CASE",
+  "PR_BREAK",
+  "PR_DEFAULT",
+  "PR_NEW",
+  "PUNTO",
   "PR_INCLUDE",
   "PR_STD",
   "PR_COUT",

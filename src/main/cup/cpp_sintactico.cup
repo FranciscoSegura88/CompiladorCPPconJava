@@ -22,7 +22,10 @@ parser code {:
     public  SymbolTable         tablaSimbolos = new SymbolTable();
     public  List<SemanticError> erroresSem    = new ArrayList<>();
     public  TACGenerator        tac           = new TACGenerator();
-    public  java.util.Deque<String[]> labelStack = new java.util.ArrayDeque<>();
+    public  java.util.Deque<String[]> labelStack   = new java.util.ArrayDeque<>();
+    public  java.util.Deque<String[]> switchStack  = new java.util.ArrayDeque<>();
+    public  java.util.Deque<String>   caseSkipStack = new java.util.ArrayDeque<>();
+    public  java.util.Deque<java.util.List<String>> forIncrStack = new java.util.ArrayDeque<>();
 
     public parser(ScannerLexicoCpp scanner) {
         this(scanner, new DefaultSymbolFactory());
@@ -264,6 +267,8 @@ parser code {:
 terminal PR_INT, PR_FLOAT, PR_BOOL, PR_CHAR, PR_STRING, PR_DOUBLE;
 terminal PR_VOID, PR_MAIN;
 terminal PR_IF, PR_ELSE, PR_WHILE, PR_DO, PR_RETURN;
+terminal PR_FOR, PR_SWITCH, PR_CASE, PR_BREAK, PR_DEFAULT, PR_NEW;
+terminal PUNTO;
 terminal PR_INCLUDE, PR_STD, PR_COUT, PR_CIN;
 terminal PR_USING, PR_NAMESPACE, PR_ENDL;
 terminal LIB_IOSTREAM;
@@ -305,6 +310,10 @@ non terminal ExprResult expr;
 non terminal Integer args_llamada, lista_args;
 non terminal abre_metodo, abre_main;
 non terminal abre_if, abre_else, abre_while, abre_do, marca_while;
+non terminal abre_for, marca_for, abre_for_incr, abre_for_body;
+non terminal for_init, for_incr;
+non terminal abre_switch, switch_body, lista_cases;
+non terminal case_item, abre_case, abre_default, default_clause;
 non terminal flujo_salida;
 
 /*═══════════════ PRECEDENCIA ═══════════════*/
@@ -501,6 +510,115 @@ marca_while
            parser.labelStack.push(new String[]{Lw, Lwe}); :}
     ;
 
+abre_for
+    ::= /* vacío */
+        {: parser.tablaSimbolos.enterScope("for"); :}
+    ;
+
+marca_for
+    ::= /* vacío */
+        {: String Lf = parser.tac.nuevoLabel();
+           String Lfe = parser.tac.nuevoLabel();
+           parser.tac.emitir(Lf + ":");
+           parser.labelStack.push(new String[]{Lf, Lfe}); :}
+    ;
+
+abre_for_incr
+    ::= /* vacío */
+        {: ExprResult _cf = (ExprResult)((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).value;
+           parser.lineaCond = ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).left;
+           parser.colCond   = ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).right;
+           String[] _fl = parser.labelStack.peek();
+           parser.tac.emitir("ifFalse " + _cf.lugar + " goto " + _fl[1]);
+           parser.tac.iniciarBuffer(); :}
+    ;
+
+abre_for_body
+    ::= /* vacío */
+        {: java.util.List<String> incr = parser.tac.obtenerBuffer();
+           parser.forIncrStack.push(incr); :}
+    ;
+
+for_init
+    ::= tipo:t ID:n OP_ASIG expr:te
+        {: int l=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).left;
+           int c=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-3)).right;
+           parser.declararSimbolo((String)n,(String)t,false,te.tipo,l,c);
+           parser.tac.emitir((String)n+" = "+te.lugar); :}
+    |   ID:n OP_ASIG expr:te
+        {: int l=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left;
+           int c=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right;
+           parser.verificarDeclarado((String)n,l,c);
+           parser.verificarAsignacion((String)n,te.tipo,l,c);
+           parser.tac.emitir((String)n+" = "+te.lugar); :}
+    ;
+
+for_incr
+    ::= ID:n OP_INC
+        {: parser.tac.emitir((String)n+" = "+(String)n+" + 1"); :}
+    |   ID:n OP_DEC
+        {: parser.tac.emitir((String)n+" = "+(String)n+" - 1"); :}
+    |   ID:n OP_ASIG expr:te
+        {: parser.tac.emitir((String)n+" = "+te.lugar); :}
+    |   ID:n OP_SUMA_ASIG expr:te
+        {: String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+(String)n+" + "+te.lugar);
+           parser.tac.emitir((String)n+" = "+tmp); :}
+    |   ID:n OP_RESTA_ASIG expr:te
+        {: String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = "+(String)n+" - "+te.lugar);
+           parser.tac.emitir((String)n+" = "+tmp); :}
+    ;
+
+abre_switch
+    ::= /* vacío */
+        {: ExprResult _cs = (ExprResult)((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).value;
+           String ts = parser.tac.nuevoTemp();
+           parser.tac.emitir(ts + " = " + _cs.lugar);
+           String Lend = parser.tac.nuevoLabel();
+           parser.switchStack.push(new String[]{ts, Lend});
+           parser.tablaSimbolos.enterScope("switch"); :}
+    ;
+
+abre_case
+    ::= /* vacío */
+        {: Integer val = (Integer)((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-1)).value;
+           String[] sw = parser.switchStack.peek();
+           String Lskip = parser.tac.nuevoLabel();
+           parser.tac.emitir("if " + sw[0] + " != " + val + " goto " + Lskip);
+           parser.caseSkipStack.push(Lskip);
+           parser.tablaSimbolos.enterScope("case"); :}
+    ;
+
+abre_default
+    ::= /* vacío */
+        {: parser.tablaSimbolos.enterScope("default"); :}
+    ;
+
+switch_body
+    ::= lista_cases
+    |   lista_cases default_clause
+    |   default_clause
+    |   /* vacío */
+    ;
+
+lista_cases
+    ::= lista_cases case_item
+    |   case_item
+    ;
+
+case_item
+    ::= PR_CASE LIT_ENTERO:v DOS_PUNTOS abre_case lista_sentencias
+        {: String Lskip = parser.caseSkipStack.pop();
+           parser.tac.emitir(Lskip + ":");
+           parser.tablaSimbolos.exitScope(); :}
+    ;
+
+default_clause
+    ::= PR_DEFAULT DOS_PUNTOS abre_default lista_sentencias
+        {: parser.tablaSimbolos.exitScope(); :}
+    ;
+
 /* ── Tipos ── */
 tipo
     ::= PR_INT    {: RESULT="int";    :} | PR_FLOAT  {: RESULT="float";  :}
@@ -671,6 +789,35 @@ sentencia
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).left,
                ((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-2)).right);
            parser.tablaSimbolos.exitScope(); :}
+
+    /* for */
+    |   PR_FOR abre_for PAREN_IZQ for_init PUNTO_COMA
+        marca_for expr:c PUNTO_COMA
+        abre_for_incr for_incr PAREN_DER
+        abre_for_body LLAVE_IZQ lista_sentencias LLAVE_DER
+        {: String[] _fl = parser.labelStack.pop();
+           java.util.List<String> incr = parser.forIncrStack.pop();
+           for (String inst : incr) parser.tac.emitir(inst);
+           parser.tac.emitir("goto " + _fl[0]);
+           parser.tac.emitir(_fl[1] + ":");
+           parser.verificarCondicion(c.tipo, parser.lineaCond, parser.colCond);
+           parser.tablaSimbolos.exitScope(); :}
+
+    /* switch */
+    |   PR_SWITCH PAREN_IZQ expr:c PAREN_DER abre_switch LLAVE_IZQ switch_body LLAVE_DER
+        {: String[] sw = parser.switchStack.pop();
+           parser.tac.emitir(sw[1] + ":");
+           parser.tablaSimbolos.exitScope(); :}
+
+    /* break */
+    |   PR_BREAK PUNTO_COMA
+        {: if (!parser.switchStack.isEmpty()) {
+               parser.tac.emitir("goto " + parser.switchStack.peek()[1]);
+           } :}
+
+    /* obj.method(args); */
+    |   ID:obj PUNTO ID:m PAREN_IZQ args_llamada:argc PAREN_DER PUNTO_COMA
+        {: parser.tac.emitir("call "+obj+"."+m+", "+argc); :}
     ;
 
 /* ── Expresiones ── */
@@ -783,6 +930,11 @@ expr
            String tmp=parser.tac.nuevoTemp();
            parser.tac.emitir(tmp+" = call "+n+", "+argc);
            RESULT=new ExprResult(retTipo,tmp); :}
+    /* obj.method(args) dentro de expr */
+    |   ID:obj PUNTO ID:m PAREN_IZQ args_llamada:argc PAREN_DER
+        {: String tmp=parser.tac.nuevoTemp();
+           parser.tac.emitir(tmp+" = call "+obj+"."+m+", "+argc);
+           RESULT=new ExprResult("unknown",tmp); :}
     /* literales e IDs */
     |   LIT_ENTERO:v
         {: String tmp=parser.tac.nuevoTemp();
@@ -850,6 +1002,13 @@ variable
                parser.tablaSimbolos.insertarForzado((String)n,(String)t,false,null,l,c);
            }
            parser.tac.emitir((String)n+" = "+te.lugar); :}
+
+    /* tipo x = new ClassName(args); */
+    |   tipo:t ID:n OP_ASIG PR_NEW ID:cn PAREN_IZQ args_llamada:argc PAREN_DER PUNTO_COMA
+        {: int l=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-8)).left;
+           int c=((Symbol)CUP$parser$stack.elementAt(CUP$parser$top-8)).right;
+           parser.declararSimbolo((String)n,(String)cn,false,null,l,c);
+           parser.tac.emitir((String)n+" = create "+(String)cn); :}
 
     /* error: falta ; */
     |   tipo:t ID:n OP_ASIG expr error
