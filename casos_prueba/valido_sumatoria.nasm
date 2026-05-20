@@ -75,6 +75,11 @@ L1:
 L2:
     mov rax, qword [suma]
     call _print_int
+    mov  rax, 1
+    mov  rdi, 1
+    lea  rsi, [rel _nl]
+    mov  rdx, 1
+    syscall
     mov rax, 0
     mov  qword [t8], rax
     mov rax, qword [t8]

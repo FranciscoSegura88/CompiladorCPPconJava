@@ -18,7 +18,7 @@ public:
             suma = suma + i;
         }
 
-        cout << suma;
+        cout << suma <<endl;
 
         return 0;
     }

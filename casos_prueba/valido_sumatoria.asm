@@ -59,6 +59,8 @@ _start:
               L2:                                    ; etiqueta de salto
 
     ; [sin mapa] print suma
+
+    ; [sin mapa] printnl
     0x1080    LOAD R1, #0                            ; cargar '0'
     0x1084    STORE [0x2024], R1                     ; asignar a 't8'
     0x1088    LOAD R1, [0x2024]                      ; cargar valor de retorno 't8'
